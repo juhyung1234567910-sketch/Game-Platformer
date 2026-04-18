@@ -1,10 +1,64 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>나의 첫 사이트</title>
+    <title>나의 첫 플랫포머 게임</title>
+    <style>
+        /* 게임 화면을 가운데로 오게 하고 배경을 어둡게 만듦 */
+        body { margin: 0; background-color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        /* 게임 도화지(캔버스) 색상은 하늘색으로! */
+        canvas { background-color: #87CEEB; } 
+    </style>
 </head>
 <body>
-	<h1>안녕, 깃허브!</h1>
-	<p>나는 지금 웹사이트 만드는 법을 배우고 있어.</p>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // 1. 주인공 캐릭터 (빨간 네모) 설정
+        let player = {
+            x: 50,          // 시작 x 위치
+            y: 300,         // 시작 y 위치
+            width: 30,      // 가로 크기
+            height: 30,     // 세로 크기
+            color: "red",
+            dy: 0,          // 위아래 속도
+            jumpPower: -10, // 점프 뛰는 힘
+            gravity: 0.5,   // 밑으로 당기는 중력
+            grounded: false // 바닥에 닿아있는지 확인
+        };
+
+        // 2. 게임을 1초에 60번씩 업데이트하는 함수
+        function update() {
+            // 중력 적용 (계속 아래로 떨어지게 만듦)
+            player.dy += player.gravity;
+            player.y += player.dy;
+
+            // 바닥에 닿으면 떨어지는 걸 멈춤
+            if (player.y + player.height > canvas.height) {
+                player.y = canvas.height - player.height;
+                player.dy = 0;
+                player.grounded = true; // 점프 가능 상태로 변경
+            }
+
+            // 화면을 깨끗하게 지우고 캐릭터를 다시 그림 (애니메이션 원리)
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            requestAnimationFrame(update); // 무한 반복!
+        }
+
+        // 3. 스페이스바를 누르면 점프!
+        window.addEventListener("keydown", (e) => {
+            if (e.code === "Space" && player.grounded) {
+                player.dy = player.jumpPower;
+                player.grounded = false; // 공중에 있으니 다시 못 뛰게 막음
+            }
+        });
+
+        update(); // 게임 시작!
+    </script>
 </body>
 </html>
