@@ -1,64 +1,109 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>나의 첫 플랫포머 게임</title>
+    <title>멀티플레이 플랫포머</title>
     <style>
-        /* 게임 화면을 가운데로 오게 하고 배경을 어둡게 만듦 */
-        body { margin: 0; background-color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        /* 게임 도화지(캔버스) 색상은 하늘색으로! */
-        canvas { background-color: #87CEEB; } 
+        body { margin: 0; background-color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        canvas { background-color: #87CEEB; }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas" width="800" height="400"></canvas>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue, onDisconnect } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
+
+        // 1. 네 파이어베이스 설정 (★여기에 URL을 꼭 넣어줘!★)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAS4bTPT7sNfVs_EblSJEOYlbwXWMd9iPc",
+            authDomain: "multiplatformer-1acb3.firebaseapp.com",
+            databaseURL: "https://여기에-복사한-데이터베이스-주소를-넣어주세요.firebasedatabase.app", 
+            projectId: "multiplatformer-1acb3",
+            storageBucket: "multiplatformer-1acb3.firebasestorage.app",
+            messagingSenderId: "271218714227",
+            appId: "1:271218714227:web:f20fbfd74cb303c7b76c06"
+        };
+
+        // 파이어베이스 실행!
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // 2. 내 캐릭터 고유 아이디 만들기
+        const playerId = "player_" + Math.floor(Math.random() * 10000); 
+        const playerRef = ref(db, `players/${playerId}`); // 내 전용 저장 공간
+        const allPlayersRef = ref(db, 'players'); // 모든 유저 저장 공간
+
+        // 내가 창을 끄면 서버에서 내 캐릭터 지우기 (유령 방지)
+        onDisconnect(playerRef).remove();
+
+        // 캐릭터 랜덤 색상
+        const colors = ["red", "blue", "green", "yellow", "purple", "orange", "pink"];
+        const myColor = colors[Math.floor(Math.random() * colors.length)];
+
+        let player = { x: 50, y: 300, width: 30, height: 30, color: myColor, dy: 0, jumpPower: -10, gravity: 0.5, grounded: false };
+        let otherPlayers = {}; // 다른 유저들 정보
+
+        // 3. 서버에서 다른 유저들 위치 실시간으로 받아오기
+        onValue(allPlayersRef, (snapshot) => {
+            otherPlayers = snapshot.val() || {};
+        });
+
+        // 키보드 누르는 상태 저장
+        let keys = {};
+        window.addEventListener("keydown", (e) => { keys[e.code] = true; });
+        window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
 
-        // 1. 주인공 캐릭터 (빨간 네모) 설정
-        let player = {
-            x: 50,          // 시작 x 위치
-            y: 300,         // 시작 y 위치
-            width: 30,      // 가로 크기
-            height: 30,     // 세로 크기
-            color: "red",
-            dy: 0,          // 위아래 속도
-            jumpPower: -10, // 점프 뛰는 힘
-            gravity: 0.5,   // 밑으로 당기는 중력
-            grounded: false // 바닥에 닿아있는지 확인
-        };
-
-        // 2. 게임을 1초에 60번씩 업데이트하는 함수
+        // 4. 게임 화면 그리기
         function update() {
-            // 중력 적용 (계속 아래로 떨어지게 만듦)
+            // 좌우 이동
+            if (keys["ArrowLeft"] || keys["KeyA"]) player.x -= 5;
+            if (keys["ArrowRight"] || keys["KeyD"]) player.x += 5;
+
+            // 점프
+            if (keys["Space"] && player.grounded) {
+                player.dy = player.jumpPower;
+                player.grounded = false;
+            }
+
+            // 중력
             player.dy += player.gravity;
             player.y += player.dy;
 
-            // 바닥에 닿으면 떨어지는 걸 멈춤
+            // 바닥 충돌
             if (player.y + player.height > canvas.height) {
                 player.y = canvas.height - player.height;
                 player.dy = 0;
-                player.grounded = true; // 점프 가능 상태로 변경
+                player.grounded = true;
             }
 
-            // 화면을 깨끗하게 지우고 캐릭터를 다시 그림 (애니메이션 원리)
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.width, player.height);
+            // ★내 현재 위치를 서버로 전송★
+            set(playerRef, { x: player.x, y: player.y, color: player.color });
 
-            requestAnimationFrame(update); // 무한 반복!
+            // 화면 깨끗하게 지우기
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 서버에 접속해 있는 모든 유저 그리기
+            for (const id in otherPlayers) {
+                const p = otherPlayers[id];
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 30, 30);
+                
+                // 내 캐릭터면 머리 위에 "나"라고 표시
+                if (id === playerId) {
+                    ctx.fillStyle = "white";
+                    ctx.font = "14px Arial";
+                    ctx.fillText("나", p.x + 8, p.y - 5);
+                }
+            }
+
+            requestAnimationFrame(update);
         }
 
-        // 3. 스페이스바를 누르면 점프!
-        window.addEventListener("keydown", (e) => {
-            if (e.code === "Space" && player.grounded) {
-                player.dy = player.jumpPower;
-                player.grounded = false; // 공중에 있으니 다시 못 뛰게 막음
-            }
-        });
-
-        update(); // 게임 시작!
+        update(); // 게임 시작
     </script>
 </body>
 </html>
