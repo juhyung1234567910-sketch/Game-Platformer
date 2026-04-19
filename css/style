@@ -1,0 +1,41 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* 스크롤바 숨김 */
+    background-color: #000;
+}
+
+#gameCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* UI 오버레이 설정 */
+#hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* 클릭 이벤트가 캔버스로 통과하도록 설정 */
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+}
+
+#stats {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    font-size: 20px;
+}
