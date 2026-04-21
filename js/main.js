@@ -3,6 +3,17 @@ import { Camera } from './camera.js';
 import { Renderer } from './renderer.js';
 import { NetworkClient } from './network.js';
 
+// ★ 여기에 Firebase 설정이 들어가야 합니다!
+const firebaseConfig = {
+    apiKey: "AIzaSyAS4bTPT7sNfVs_EblSJEOYlbwXWMd9iPc",
+    authDomain: "multiplatformer-1acb3.firebaseapp.com",
+    databaseURL: "https://multiplatformer-1acb3-default-rtdb.asia-southeast1.firebasedatabase.app", 
+    projectId: "multiplatformer-1acb3",
+    storageBucket: "multiplatformer-1acb3.firebasestorage.app",
+    messagingSenderId: "271218714227",
+    appId: "1:271218714227:web:f20fbfd74cb303c7b76c06"
+};
+
 class Game {
     constructor() {
         // 1. 캔버스 초기화
@@ -14,7 +25,9 @@ class Game {
         this.player = new Player();
         this.camera = new Camera();
         this.renderer = new Renderer(this.canvas);
-        this.network = new NetworkClient("127.0.0.1", 5000); 
+        
+        // ★ 127.0.0.1 대신 firebaseConfig를 넣어줍니다!
+        this.network = new NetworkClient(firebaseConfig); 
 
         // 3. 상태 변수
         this.keys = {}; // 눌린 키보드 상태를 저장하는 딕셔너리
@@ -72,7 +85,7 @@ class Game {
 
         // 1. 재장전 연산
         if (this.player.isReloading) {
-            this.player.reloadTimer -= 1.0;
+            this.player.reloadTimer -= 1.0; // 프레임 단위로 감소 (필요시 dt 기반으로 수정 가능)
             if (this.player.reloadTimer <= 0) {
                 this.player.isReloading = false;
                 this.player.ammo = this.player.maxAmmo;
@@ -84,19 +97,24 @@ class Game {
         this.player.checkDeathAndRespawn(this.network);
 
         // 3. 카메라 데이터(행렬 등) 계산
-        // 💡 화면이 찌그러지지 않도록 캔버스의 너비와 높이를 같이 넘겨줍니다.
         const camData = this.camera.updateAndGetMatrices(this.player, this.canvas.width, this.canvas.height);
 
         // 4. 플레이어 이동 및 물리 업데이트
-        // 카메라의 바라보는 방향(front)과 오른쪽 방향(rightVec)을 기준으로 움직입니다.
         const radYaw = this.player.yaw * (Math.PI / 180);
         const rightVec = [-Math.sin(radYaw), 0.0, Math.cos(radYaw)];
         this.player.update(dt, this.keys, camData.front, rightVec);
 
+        // ★ Firebase 서버로 내 위치 정보 전송 (너무 많이 보내면 튕기므로 적당히 조절)
+        if (Math.floor(timestamp) % 3 === 0) {
+            this.network.sendData({
+                pos: this.player.pos,
+                yaw: this.player.yaw,
+                health: this.player.health
+            });
+        }
+
         // 5. 렌더링 실행
         this.renderer.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-        
-        // 💡 카메라에서 계산된 행렬(camData)을 통째로 렌더러에 넘겨줍니다.
         this.renderer.drawWorld(this.player, camData);
         
         // (향후 1인칭 무기 렌더링이 추가되면 사용할 부분)
@@ -107,7 +125,7 @@ class Game {
         // 무한 루프
         requestAnimationFrame(this.loop);
     }
-}
+} // <--- 아까 빠져있던 클래스 닫는 중괄호입니다!
 
 // 브라우저 렌더링이 끝나면 게임 시작
 window.onload = () => {
