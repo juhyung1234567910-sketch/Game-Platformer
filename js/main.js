@@ -38,8 +38,8 @@ class Game {
         const dt = (timestamp - this.lastTime) / 1000.0;
         this.lastTime = timestamp;
 
-        // 1. 카메라 벡터(앞, 오른쪽)를 먼저 계산해서 플레이어에게 넘겨줍니다.
-        const camData = this.camera.updateAndGetMatrices(this.player);
+        // 수정 후 (가로, 세로 길이를 넘겨주어 화면이 찌그러지지 않게 방지)
+        const camData = this.camera.updateAndGetMatrices(this.player, this.canvas.width, this.canvas.height);
         
         // 오른쪽 벡터 계산 (Y축 회전 기준)
         const radYaw = this.player.yaw * (Math.PI / 180);
