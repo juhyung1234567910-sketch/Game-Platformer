@@ -1,41 +1,50 @@
-// 필요에 따라 다른 모듈들을 import 합니다.
-// import { Player } from './player.js';
-// import { Renderer } from './renderer.js';
+export class Player {
+    constructor() {
+        this.maxHealth = 100;
+        this.health = this.maxHealth;
+        this.maxAmmo = 30;
+        this.ammo = this.maxAmmo;
+        this.pos = [0.0, 1.0, 5.0];
+        
+        this.yaw = 0.0;
+        this.pitch = 0.0;
+        this.moveTime = 0.0;
+        this.bobAmp = 0.0;
+        this.isAiming = false;
+        this.isSliding = false;
+        this.isReloading = false;
+        this.reloadTimer = 0;
+        this.reloadDuration = 60.0;
+        
+        this.swayX = 0.0;
+        this.swayY = 0.0;
+        this.targetSwayX = 0.0;
+        this.targetSwayY = 0.0;
+        this.recoilOffset = 0.0;
+        this.adsProgress = 0.0;
+    }
 
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('webgl'); // 또는 '2d'나 Three.js의 WebGLRenderer 사용
+    updateHUD() {
+        document.getElementById('hp').innerText = this.health;
+        document.getElementById('ammo').innerText = this.ammo;
+    }
 
-// 캔버스 크기 조정
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    // WebGL 뷰포트 업데이트 로직 추가
+    checkDeathAndRespawn(networkClient) {
+        if (this.health <= 0 || this.pos[1] <= -20.0) {
+            console.log(`[💀] 사망! (현재 HP: ${this.health})`);
+            
+            this.health = this.maxHealth;
+            this.ammo = this.maxAmmo;
+            this.pos = [0.0, 1.0, 5.0]; 
+            this.updateHUD();
+
+            if (networkClient) {
+                networkClient.sendData({
+                    type: "update",
+                    pos: this.pos,
+                    health_reset: true
+                });
+            }
+        }
+    }
 }
-window.addEventListener('resize', resize);
-resize();
-
-// 마우스 잠금 (FPS 시점 제어용)
-canvas.addEventListener('click', () => {
-    canvas.requestPointerLock();
-});
-
-let lastTime = 0;
-
-// 메인 게임 루프
-function gameLoop(timestamp) {
-    const deltaTime = (timestamp - lastTime) / 1000.0; // 초 단위 델타 타임
-    lastTime = timestamp;
-
-    // 1. 입력 처리 및 로직 업데이트
-    // player.update(deltaTime);
-    // camera.update(player);
-
-    // 2. 화면 렌더링
-    // renderer.render(scene, camera);
-
-    // 다음 프레임 요청
-    requestAnimationFrame(gameLoop);
-}
-
-// 루프 시작
-requestAnimationFrame(gameLoop);
