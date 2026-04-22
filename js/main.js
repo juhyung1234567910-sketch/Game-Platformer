@@ -1,3 +1,8 @@
+// main.js 맨 위에 추가
+window.onerror = function(msg, url, line) {
+    alert("에러 발생: " + msg + "\n위치: " + url + ":" + line);
+    return false;
+};
 import { Player } from './player.js';
 import { Camera } from './camera.js';
 import { Renderer } from './renderer.js';
