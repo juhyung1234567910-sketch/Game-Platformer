@@ -205,7 +205,7 @@ export class Renderer {
     dot(a,b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
 
     // --- 통합 렌더링 루프 ---
-    draw(player, camera, mapData, remotePlayers) {
+    drawWorld(player, camera, mapData, remotePlayers) {
         const gl = this.gl;
         if (!mapData) return;
 
