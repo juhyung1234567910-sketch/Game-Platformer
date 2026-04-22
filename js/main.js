@@ -78,6 +78,14 @@ class Game {
     }
 
     loop(timestamp) {
+        // loop 안에 추가
+        if (this.network.remotePlayers && Object.keys(this.network.remotePlayers).length > 0) {
+            // 다른 플레이어가 감지되면 딱 한 번만 알림
+            if(!window.alerted) {
+                alert("다른 플레이어 발견!: " + Object.keys(this.network.remotePlayers).length + "명");
+                window.alerted = true;
+            }
+        }
         const dt = (timestamp - this.lastTime) / 1000.0;
         this.lastTime = timestamp;
 
