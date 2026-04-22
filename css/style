@@ -1,42 +1,54 @@
+/* 기본 여백 제거 및 스크롤바 방지 */
 body, html {
     margin: 0;
     padding: 0;
     width: 100%;
     height: 100%;
-    overflow: hidden;
-    background-color: #000;
+    overflow: hidden; 
+    background-color: #000; /* 혹시 렌더링이 안 되더라도 까만 배경으로 보이게 */
 }
 
+/* 캔버스를 화면 전체에 꽉 채우고 맨 밑장(z-index: 1)으로 뺌 */
 #gameCanvas {
     display: block;
     width: 100vw;
     height: 100vh;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1; 
 }
 
+/* UI 전체 껍데기 */
 #hud {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none; /* 클릭 방해 금지 */
-    color: white;
-    font-family: Arial, sans-serif;
+    z-index: 2; /* 캔버스 위로 띄움 */
+    pointer-events: none; /* UI 때문에 마우스 클릭이 씹히는 현상 방지 */
 }
 
+/* 정중앙 십자선 */
 #crosshair {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 24px;
+    color: white;
+    font-size: 30px;
     font-weight: bold;
 }
 
+/* 왼쪽 아래 체력, 총알 텍스트 */
 #stats {
     position: absolute;
-    bottom: 20px;
-    left: 20px;
-    font-size: 20px;
-    text-shadow: 1px 1px 2px black;
+    bottom: 30px;
+    left: 30px;
+    color: white;
+    font-size: 24px;
+    font-family: monospace, sans-serif;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8); /* 글자가 잘 보이도록 그림자 추가 */
 }
