@@ -15,7 +15,7 @@ const firebaseConfig = {
     authDomain: "multiplatformer-1acb3.firebaseapp.com",
     databaseURL: "https://multiplatformer-1acb3-default-rtdb.asia-southeast1.firebasedatabase.app", 
     projectId: "multiplatformer-1acb3",
-    storageBucket: "multiplatformer-1acb3.firebasedatabase.app",
+    storageBucket: "multiplatformer-1acb3.firebasestorage.app",
     messagingSenderId: "271218714227",
     appId: "1:271218714227:web:f20fbfd74cb303c7b76c06"
 };
@@ -38,6 +38,14 @@ class Game {
         // 3. 상태 변수
         this.keys = {}; 
         this.lastTime = performance.now();
+
+        // 🗺️ 맵 장애물 설정 (추가됨)
+        this.mapData = [
+            { pos: [5, 1, 5], scale: [1, 1, 1] },
+            { pos: [-5, 1, 0], scale: [2, 1, 2] },
+            { pos: [0, 1, -10], scale: [10, 1, 1] },
+            { pos: [10, 2, 0], scale: [1, 2, 5] }
+        ];
         
         // 4. 이벤트 및 루프 시작
         this.initEvents();
@@ -78,14 +86,14 @@ class Game {
     }
 
     loop(timestamp) {
-        // loop 안에 추가
+        // 네트워크 디버깅 alert
         if (this.network.remotePlayers && Object.keys(this.network.remotePlayers).length > 0) {
-            // 다른 플레이어가 감지되면 딱 한 번만 알림
             if(!window.alerted) {
                 alert("다른 플레이어 발견!: " + Object.keys(this.network.remotePlayers).length + "명");
                 window.alerted = true;
             }
         }
+
         const dt = (timestamp - this.lastTime) / 1000.0;
         this.lastTime = timestamp;
 
@@ -100,7 +108,9 @@ class Game {
         }
 
         // 2. 사망 연산 및 서버 통신
-        this.player.checkDeathAndRespawn(this.network);
+        if (typeof this.player.checkDeathAndRespawn === 'function') {
+            this.player.checkDeathAndRespawn(this.network);
+        }
 
         // 3. 카메라 데이터 계산
         const camData = this.camera.updateAndGetMatrices(this.player, this.canvas.width, this.canvas.height);
@@ -122,8 +132,8 @@ class Game {
         // 5. 렌더링 실행
         this.renderer.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
         
-        // 💡 중요: 여기서 세 번째 인자로 this.network.remotePlayers를 꼭 넘겨줘야 함!
-        this.renderer.drawWorld(this.player, camData, this.network.remotePlayers);
+        // 💡 맵 데이터(this.mapData)까지 포함해서 렌더링 호출
+        this.renderer.drawWorld(this.player, camData, this.network.remotePlayers, this.mapData);
         
         if (this.camera.isFirstPerson && typeof this.renderer.drawFirstPersonWeapon === 'function') {
             this.renderer.drawFirstPersonWeapon(this.player, this.canvas.width, this.canvas.height);
