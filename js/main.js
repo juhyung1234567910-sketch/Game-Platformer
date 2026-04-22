@@ -3,6 +3,7 @@ import { Camera } from './camera.js';
 import { Renderer } from './renderer.js';
 import { NetworkClient } from './network.js';
 
+alert("Working");
 // ★ 여기에 Firebase 설정이 들어가야 합니다!
 const firebaseConfig = {
     apiKey: "AIzaSyAS4bTPT7sNfVs_EblSJEOYlbwXWMd9iPc",
