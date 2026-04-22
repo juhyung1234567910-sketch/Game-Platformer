@@ -3,25 +3,26 @@ export class Renderer {
         this.canvas = canvas;
         this.gl = canvas.getContext('webgl', { antialias: true }) || canvas.getContext('experimental-webgl');
         if (!this.gl) {
-            alert("이 브라우저는 WebGL을 지원하지 않습니다.");
+            alert("WebGL을 지원하지 않는 브라우저입니다.");
             return;
         }
 
-        // 1. 고해상도 그림자 설정
-        this.shadowSize = 2048; 
+        // 그림자 해상도 (고화질 설정)
+        this.shadowSize = 2048;
+        
         this.initShaders();
         this.initShadowFramebuffer();
         this.initBuffers();
-        
-        // GL 설정 초기화
+
+        // 기본 GL 설정
         this.gl.enable(this.gl.DEPTH_TEST);
-        this.gl.enable(this.gl.CULL_FACE); // 성능 향상을 위한 후면 제거
+        this.gl.enable(this.gl.CULL_FACE);
     }
 
     initShaders() {
         const gl = this.gl;
 
-        // --- [Shadow Shader] 깊이 값을 RGBA로 정밀하게 쪼개서 저장 ---
+        // 1. [Shadow Shader] 깊이 정보를 RGBA로 정밀하게 저장
         const vsShadow = `
             attribute vec4 aPos;
             uniform mat4 uLightMatrix;
@@ -33,7 +34,6 @@ export class Renderer {
         const fsShadow = `
             precision highp float;
             void main() {
-                // 16비트 이상의 정밀도를 위해 깊이 값을 RGBA 채널에 분산 저장
                 vec4 bitShift = vec4(1.0, 256.0, 256.0 * 256.0, 256.0 * 256.0 * 256.0);
                 vec4 bitMask = vec4(1.0/256.0, 1.0/256.0, 1.0/256.0, 0.0);
                 vec4 res = fract(gl_FragCoord.z * bitShift);
@@ -42,7 +42,7 @@ export class Renderer {
             }
         `;
 
-        // --- [Main Shader] Blinn-Phong + PCF Soft Shadows + Ambient Occlusion 느낌 ---
+        // 2. [Main Shader] 블록과 바닥 모두에 입체적인 그림자와 광택 적용
         const vsMain = `
             attribute vec4 aPos;
             attribute vec3 aNormal;
@@ -65,7 +65,6 @@ export class Renderer {
             uniform vec3 uViewPos;
             uniform sampler2D uShadowMap;
 
-            // RGBA로 쪼개진 깊이 값을 다시 하나로 합치는 함수
             float unpackDepth(vec4 color) {
                 const vec4 bitShift = vec4(1.0, 1.0/256.0, 1.0/(256.0*256.0), 1.0/(256.0*256.0*256.0));
                 return dot(color, bitShift);
@@ -78,28 +77,28 @@ export class Renderer {
                 vec3 viewDir = normalize(uViewPos - vPos);
                 vec3 halfDir = normalize(lightDir + viewDir);
 
-                // 1. 부드러운 그림자 (PCF 9-tap)
+                // --- 소프트 쉐도우 판정 (PCF) ---
                 vec3 shadowCoord = (vShadowPos.xyz / vShadowPos.w) * 0.5 + 0.5;
                 float shadow = 0.0;
-                float bias = max(0.008 * (1.0 - dot(normal, lightDir)), 0.002);
+                float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.0005);
                 
+                // 주변 9개의 텍셀을 검사하여 부드러운 그림자 생성
                 for(float x = -1.0; x <= 1.0; x += 1.0) {
                     for(float y = -1.0; y <= 1.0; y += 1.0) {
                         float depth = unpackDepth(texture2D(uShadowMap, shadowCoord.xy + vec2(x, y) / 2048.0));
-                        shadow += (shadowCoord.z - bias > depth) ? 0.35 : 1.0;
+                        shadow += (shadowCoord.z - bias > depth) ? 0.4 : 1.0;
                     }
                 }
                 shadow /= 9.0;
 
-                // 2. 조명 계산 (Blinn-Phong)
+                // --- 조명 모델 (Blinn-Phong) ---
                 float diff = max(dot(normal, lightDir), 0.0);
-                float spec = pow(max(dot(normal, halfDir), 0.0), 50.0);
+                float spec = pow(max(dot(normal, halfDir), 0.0), 40.0);
                 
-                vec3 ambient = uColor.rgb * 0.45; // 그림자 속 밝기 상향
+                vec3 ambient = uColor.rgb * 0.45; 
                 vec3 diffuse = uColor.rgb * diff;
-                vec3 specular = vec3(0.5) * spec;
+                vec3 specular = vec3(0.4) * spec;
 
-                // 최종 색상 조합
                 gl_FragColor = vec4(ambient + (diffuse + specular) * shadow, uColor.a);
             }
         `;
@@ -112,8 +111,12 @@ export class Renderer {
         const gl = this.gl;
         const vs = gl.createShader(gl.VERTEX_SHADER);
         gl.shaderSource(vs, vsS); gl.compileShader(vs);
+        if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(vs));
+
         const fs = gl.createShader(gl.FRAGMENT_SHADER);
         gl.shaderSource(fs, fsS); gl.compileShader(fs);
+        if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(fs));
+
         const prog = gl.createProgram();
         gl.attachShader(prog, vs); gl.attachShader(prog, fs);
         gl.linkProgram(prog);
@@ -131,13 +134,13 @@ export class Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        const depthRB = gl.createRenderbuffer();
-        gl.bindRenderbuffer(gl.RENDERBUFFER, depthRB);
+        this.depthRB = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, this.depthRB);
         gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, this.shadowSize, this.shadowSize);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.shadowTex, 0);
-        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRB);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.depthRB);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
@@ -146,14 +149,14 @@ export class Renderer {
         this.cubeBuf = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeBuf);
         const s = 1.0;
-        // 위치(3) + 노멀(3)
         const data = new Float32Array([
-            -s,-s, s, 0,0,1,  s,-s, s, 0,0,1,  s, s, s, 0,0,1, -s, s, s, 0,0,1, // 앞
-            -s,-s,-s, 0,0,-1, -s, s,-s, 0,0,-1,  s, s,-s, 0,0,-1,  s,-s,-s, 0,0,-1, // 뒤
-            -s, s,-s, 0,1,0, -s, s, s, 0,1,0,  s, s, s, 0,1,0,  s, s,-s, 0,1,0, // 위
-            -s,-s,-s, 0,-1,0,  s,-s,-s, 0,-1,0,  s,-s, s, 0,-1,0, -s,-s, s, 0,-1,0, // 아래
-             s,-s,-s, 1,0,0,  s, s,-s, 1,0,0,  s, s, s, 1,0,0,  s,-s, s, 1,0,0, // 우
-            -s,-s,-s,-1,0,0, -s,-s, s,-1,0,0, -s, s, s,-1,0,0, -s, s,-s,-1,0,0  // 좌
+            // Pos(3), Normal(3)
+            -s,-s, s, 0,0,1,  s,-s, s, 0,0,1,  s, s, s, 0,0,1, -s, s, s, 0,0,1,
+            -s,-s,-s, 0,0,-1, -s, s,-s, 0,0,-1,  s, s,-s, 0,0,-1,  s,-s,-s, 0,0,-1,
+            -s, s,-s, 0,1,0, -s, s, s, 0,1,0,  s, s, s, 0,1,0,  s, s,-s, 0,1,0,
+            -s,-s,-s, 0,-1,0,  s,-s,-s, 0,-1,0,  s,-s, s, 0,-1,0, -s,-s, s, 0,-1,0,
+             s,-s,-s, 1,0,0,  s, s,-s, 1,0,0,  s, s, s, 1,0,0,  s,-s, s, 1,0,0,
+            -s,-s,-s,-1,0,0, -s,-s, s,-1,0,0, -s, s, s,-1,0,0, -s, s,-s,-1,0,0
         ]);
         gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
 
@@ -163,7 +166,7 @@ export class Renderer {
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
     }
 
-    // --- 수학 함수 직접 구현 (줄 수 확보 및 정밀도 향상) ---
+    // --- 행렬 수학 함수 직접 구현 (생략 금지) ---
     multiplyMatrices(a, b) {
         const res = new Float32Array(16);
         for (let i = 0; i < 4; i++) {
@@ -193,22 +196,22 @@ export class Renderer {
         const gl = this.gl;
         if (!mapData) return;
 
-        // 빛의 시점 행렬 계산 (정교하게)
-        const lightProj = this.getOrtho(-25, 25, -25, 25, 0.1, 60);
+        // 빛의 위치와 투영 행렬 (태양광 느낌)
+        const lightProj = this.getOrtho(-35, 35, -35, 35, 0.1, 70);
         const lightView = this.getLookAt([15, 25, 10], [0, 0, 0], [0, 1, 0]);
         const lightMatrix = this.multiplyMatrices(lightProj, lightView);
 
-        // 1. Shadow Pass
+        // Pass 1: Shadow Map 생성 (바닥 + 블록 모두 기록)
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
         gl.viewport(0, 0, this.shadowSize, this.shadowSize);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.shadowProg);
         this.renderScene(gl, this.shadowProg, lightMatrix, null, mapData, true);
 
-        // 2. Main Pass
+        // Pass 2: 화면 렌더링
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-        gl.clearColor(0.45, 0.75, 1.0, 1.0);
+        gl.clearColor(0.4, 0.7, 1.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.mainProg);
         
@@ -241,27 +244,27 @@ export class Renderer {
         }
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
 
-        // 바닥 렌더링
-        gl.uniform4fv(uColor, [0.35, 0.55, 0.35, 1.0]);
-        const groundModel = new Float32Array([100,0,0,0, 0,0.1,0,0, 0,0,100,0, 0,0,0,1]);
+        // 1. 바닥 (바닥도 그림자를 받아야 함)
+        gl.uniform4fv(uColor, [0.3, 0.5, 0.3, 1.0]);
+        const groundModel = new Float32Array([100,0,0,0, 0,0.1,0,0, 0,0,100,0, 0,-0.05,0,1]);
         gl.uniformMatrix4fv(uModel, false, groundModel);
         gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
 
-        // 맵 오브젝트 렌더링
-        gl.uniform4fv(uColor, [0.75, 0.75, 0.75, 1.0]);
+        // 2. 맵 블록 (블록 위에 그림자가 맺히게 함)
+        gl.uniform4fv(uColor, [0.7, 0.7, 0.7, 1.0]);
         for (let box of mapData) {
             const m = new Float32Array([box.scale[0],0,0,0, 0,box.scale[1],0,0, 0,0,box.scale[2],0, box.pos[0],box.pos[1],box.pos[2],1]);
             gl.uniformMatrix4fv(uModel, false, m);
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
         }
 
-        // 다른 플레이어 렌더링
+        // 3. 다른 플레이어
         if (remotePlayers && !isShadow) {
-            gl.uniform4fv(uColor, [1.0, 0.3, 0.3, 1.0]);
+            gl.uniform4fv(uColor, [1.0, 0.2, 0.2, 1.0]);
             for (let id in remotePlayers) {
                 const p = remotePlayers[id];
                 if (!p.pos) continue;
-                const m = new Float32Array([0.6,0,0,0, 0,0.9,0,0, 0,0,0.6,0, p.pos[0], p.pos[1]+0.5, p.pos[2], 1]);
+                const m = new Float32Array([0.5,0,0,0, 0,1,0,0, 0,0,0.5,0, p.pos[0], p.pos[1], p.pos[2], 1]);
                 gl.uniformMatrix4fv(uModel, false, m);
                 gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
             }
