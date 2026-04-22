@@ -247,9 +247,20 @@ export class Renderer {
     }
 
     renderScene(prog, mapData, remotePlayers, isShadow) {
+        renderScene(prog, mapData, remotePlayers, isShadow) {
         const gl = this.gl;
+        
+        // --- [추가] 데이터 유효성 검사 (Error 방어) ---
+        // mapData가 없거나 배열이 아니면 실행하지 않고 중단합니다.
+        if (!mapData || !Array.isArray(mapData)) {
+            console.warn("mapData가 유효하지 않습니다:", mapData);
+            return; 
+        }
+        // ------------------------------------------
+    
         const uModel = gl.getUniformLocation(prog, "uModel");
         const uColor = gl.getUniformLocation(prog, "uColor");
+        // ... 이하 기존 코드 동일 ...
         const aPos = gl.getAttribLocation(prog, "aPos");
         const aNormal = gl.getAttribLocation(prog, "aNormal");
 
