@@ -32,6 +32,9 @@ export class Player {
     }
 
     update(dt, keys, front, right, mapData, network) {
+        // Player.js 의 update 함수 내부
+        const mag = Math.sqrt(moveX * moveX + moveZ * moveZ);
+        this.isMoving = mag > 0; // 이 줄을 추가해서 현재 이동 중인지 저장합니다.
         if (dt > 0.1) dt = 0.1;
 
         // --- A. 물리 ---
