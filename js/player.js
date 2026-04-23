@@ -1,108 +1,140 @@
 export class Player {
     constructor() {
         // 1. 위치 및 물리 속성
-        this.pos = [0, 2, 5]; // [x, y, z]
-        this.vel = [0, 0, 0]; // 속도 (y축은 중력/점프용)
-        this.yaw = 0;   // 좌우 회전 (도 단위)
-        this.pitch = 0; // 상하 회전 (도 단위)
-        
+        this.pos   = [0, 2, 5];  // [x, y, z]
+        this.vel   = [0, 0, 0];  // 속도
+        this.yaw   = 0;          // 좌우 회전 (도 단위) — 네트워크로 전송됨
+        this.pitch = 0;          // 상하 회전 (도 단위)
+
         // 2. 상태 능력치
-        this.health = 100;
+        this.health  = 100;
         this.maxHealth = 100;
-        this.ammo = 30;
+        this.ammo    = 30;
         this.maxAmmo = 30;
-        
-        // 3. 충돌 및 이동 설정 (Renderer와 연동됨)
-        this.radius = 0.5;       // 플레이어 몸체 반지름 (히트박스)
-        this.height = 1.8;       // 플레이어 키
-        this.speed = 7.0;        // 이동 속도 (약간 상향)
-        this.jumpForce = 0.2;    // 점프 힘 (시원하게 점프하도록 수정)
-        this.gravity = -0.5;     // 중력 가속도
-        
+
+        // 3. 충돌 및 이동 설정
+        this.radius   = 0.5;
+        this.height   = 1.8;
+        this.speed    = 7.0;
+        this.jumpForce = 0.2;
+        this.gravity  = -0.5;
+
         // 4. 상태 변수
-        this.onGround = false;
-        this.isReloading = false;
-        this.reloadTimer = 0;
-        this.reloadDuration = 60; // 약 1초 (60프레임 기준)
+        this.onGround     = false;
+        this.isReloading  = false;
+        this.reloadTimer  = 0;
+        this.reloadDuration = 60;
+
+        // 5. 네트워크 동기화 주기 관리 (매 프레임 전송 방지)
+        this._netSendTimer    = 0;
+        this._netSendInterval = 3;  // 3프레임마다 1회 전송
+        this._lastSentYaw     = null;
     }
 
-    update(dt, keys, front, right, mapData) {
-        // --- A. 물리 엔진 (중력 및 재장전) ---
-        if (dt > 0.1) dt = 0.1; // 프레임 드랍 시 튕김 방지용 캡
-        
-        this.vel[1] += this.gravity * dt; // 중력 가속도 적용
+    update(dt, keys, front, right, mapData, network) {
+        if (dt > 0.1) dt = 0.1;
+
+        // --- A. 물리 ---
+        this.vel[1] += this.gravity * dt;
 
         if (this.isReloading) {
-            this.reloadTimer -= 1;
+            this.reloadTimer--;
             if (this.reloadTimer <= 0) {
                 this.ammo = this.maxAmmo;
                 this.isReloading = false;
             }
         }
 
-        // --- B. 이동 입력 계산 ---
-        let moveX = 0;
-        let moveZ = 0;
+        // --- B. 이동 입력 ---
+        let moveX = 0, moveZ = 0;
 
         if (keys['w'] || keys['W']) { moveX += front[0]; moveZ += front[2]; }
         if (keys['s'] || keys['S']) { moveX -= front[0]; moveZ -= front[2]; }
         if (keys['a'] || keys['A']) { moveX -= right[0]; moveZ -= right[2]; }
         if (keys['d'] || keys['D']) { moveX += right[0]; moveZ += right[2]; }
 
-        // 대각선 이동 속도 보정
-        const mag = Math.sqrt(moveX * moveX + moveZ * moveZ);
+        const mag = Math.sqrt(moveX*moveX + moveZ*moveZ);
         if (mag > 0) {
             moveX = (moveX / mag) * this.speed * dt;
             moveZ = (moveZ / mag) * this.speed * dt;
         }
 
-        // --- C. 점프 처리 ---
+        // --- C. 점프 ---
         if ((keys[' '] || keys['Spacebar']) && this.onGround) {
             this.vel[1] = this.jumpForce;
             this.onGround = false;
         }
 
-        // --- D. Sliding Collision (미끄러지는 충돌 판정) ---
-        // X축 따로, Z축 따로 검사해야 벽에 비벼도 멈추지 않고 미끄러집니다.
-        
-        let nextPosX = this.pos[0] + moveX;
-        if (!this.checkCollision(nextPosX, this.pos[1], this.pos[2], mapData)) {
-            this.pos[0] = nextPosX;
-        }
+        // --- D. Sliding Collision ---
+        let nextX = this.pos[0] + moveX;
+        if (!this.checkCollision(nextX, this.pos[1], this.pos[2], mapData))
+            this.pos[0] = nextX;
 
-        let nextPosZ = this.pos[2] + moveZ;
-        if (!this.checkCollision(this.pos[0], this.pos[1], nextPosZ, mapData)) {
-            this.pos[2] = nextPosZ;
-        }
+        let nextZ = this.pos[2] + moveZ;
+        if (!this.checkCollision(this.pos[0], this.pos[1], nextZ, mapData))
+            this.pos[2] = nextZ;
 
-        // --- E. Y축(수직) 이동 및 바닥 판정 ---
+        // --- E. 수직 이동 ---
         this.pos[1] += this.vel[1];
-
-        // 기본 바닥(y=1) 및 상자 윗면 판정
         if (this.pos[1] < 1.0) {
             this.pos[1] = 1.0;
             this.vel[1] = 0;
             this.onGround = true;
+        } else if (this.checkCollision(this.pos[0], this.pos[1], this.pos[2], mapData)) {
+            this.pos[1] -= this.vel[1];
+            this.vel[1] = 0;
+            this.onGround = true;
         } else {
-            // 상자 윗면에 착지하는지 체크
-            if (this.checkCollision(this.pos[0], this.pos[1], this.pos[2], mapData)) {
-                this.pos[1] -= this.vel[1]; // 충돌 전 위치로 복구
-                this.vel[1] = 0;
-                this.onGround = true;
-            } else {
-                this.onGround = false;
+            this.onGround = false;
+        }
+
+        // --- F. 네트워크 위치·방향 전송 ---
+        // yaw 변화가 있거나 이동 중일 때만, 주기적으로 전송합니다.
+        if (network) {
+            this._netSendTimer++;
+            const isMoving = (mag > 0);
+            const yawChanged = (this._lastSentYaw === null ||
+                                Math.abs(this.yaw - this._lastSentYaw) > 1.0);
+
+            if (this._netSendTimer >= this._netSendInterval &&
+                (isMoving || yawChanged)) {
+                this._netSendTimer = 0;
+                this._lastSentYaw  = this.yaw;
+
+                network.sendData({
+                    pos:    [...this.pos],
+                    yaw:    this.yaw,   // ← 방향 추가 전송
+                    health: this.health
+                });
             }
         }
-        
+
         this.updateHUD();
     }
 
-    // AABB (Axis-Aligned Bounding Box) 충돌 알고리즘
+    /**
+     * 마우스 이동으로 yaw / pitch 업데이트.
+     * Camera 클래스나 input 핸들러에서 호출하면 됩니다.
+     *
+     * @param {number} dx  마우스 X 이동량 (픽셀)
+     * @param {number} dy  마우스 Y 이동량 (픽셀)
+     * @param {number} sensitivity  감도 (기본 0.15)
+     */
+    rotate(dx, dy, sensitivity = 0.15) {
+        this.yaw   += dx * sensitivity;
+        this.pitch -= dy * sensitivity;
+
+        // pitch 클램프 (-89 ~ +89도)
+        this.pitch = Math.max(-89, Math.min(89, this.pitch));
+
+        // yaw 0~360 정규화 (선택)
+        this.yaw = ((this.yaw % 360) + 360) % 360;
+    }
+
+    // AABB 충돌
     checkCollision(x, y, z, mapData) {
         if (!mapData) return false;
-
-        for (let box of mapData) {
-            // 상자의 실제 물리 범위 계산 (중심점 +- 스케일)
+        for (const box of mapData) {
             const minX = box.pos[0] - box.scale[0];
             const maxX = box.pos[0] + box.scale[0];
             const minY = box.pos[1] - box.scale[1];
@@ -110,9 +142,8 @@ export class Player {
             const minZ = box.pos[2] - box.scale[2];
             const maxZ = box.pos[2] + box.scale[2];
 
-            // 플레이어 히트박스와 상자의 겹침 판정
             if (x + this.radius > minX && x - this.radius < maxX &&
-                y + 0.1 > minY && y - this.height < maxY && // 높이 판정 최적화
+                y + 0.1 > minY && y - this.height < maxY &&
                 z + this.radius > minZ && z - this.radius < maxZ) {
                 return true;
             }
@@ -123,13 +154,14 @@ export class Player {
     checkDeathAndRespawn(network) {
         if (this.health <= 0) {
             this.health = 100;
-            this.pos = [0, 2, 5];
-            this.vel = [0, 0, 0];
-            this.ammo = 30;
-            
+            this.pos    = [0, 2, 5];
+            this.vel    = [0, 0, 0];
+            this.ammo   = 30;
+
             if (network) {
                 network.sendData({
-                    pos: this.pos,
+                    pos:    [...this.pos],
+                    yaw:    this.yaw,
                     health: this.health,
                     action: 'respawn'
                 });
@@ -139,9 +171,9 @@ export class Player {
     }
 
     updateHUD() {
-        const hpElem = document.getElementById('hp');
+        const hpElem   = document.getElementById('hp');
         const ammoElem = document.getElementById('ammo');
-        if (hpElem) hpElem.innerText = Math.floor(this.health);
+        if (hpElem)   hpElem.innerText   = Math.floor(this.health);
         if (ammoElem) ammoElem.innerText = this.ammo;
     }
 }
