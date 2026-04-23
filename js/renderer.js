@@ -206,14 +206,9 @@ export class Renderer {
     cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
     dot(a,b)   { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
 
-    /**
-     * yaw(도) 기준 Y축 회전 행렬 생성.
-     * 열 우선(column-major) 포맷으로 반환.
-     */
     makeYRotation(yawDeg) {
         const r = (yawDeg * Math.PI) / 180;
         const c = Math.cos(r), s = Math.sin(r);
-        // column-major
         return new Float32Array([
              c, 0,-s, 0,
              0, 1, 0, 0,
@@ -222,18 +217,14 @@ export class Renderer {
         ]);
     }
 
-    /**
-     * TRS 행렬 생성 (Translation × Rotation(Y) × Scale)
-     */
     makeTRS(tx, ty, tz, yawDeg, sx, sy, sz) {
         const r = (yawDeg * Math.PI) / 180;
         const c = Math.cos(r), s = Math.sin(r);
-        // R*S 를 곱한 뒤 translation 적용 (column-major)
         return new Float32Array([
             sx* c,  0, sx*-s, 0,
             0,      sy, 0,   0,
             sz* s,  0, sz* c, 0,
-            tx,    ty,    tz, 1
+            tx,     ty,    tz, 1
         ]);
     }
 
@@ -242,17 +233,13 @@ export class Renderer {
         const gl = this.gl;
         if (!mapData) return;
 
-        // 광원: 각도를 시간에 따라 서서히 이동시키면 그림자가 움직입니다.
-        // 고정 광원을 원한다면 this.lightAngle 라인을 제거하세요.
         if (this.lightAngle === undefined) this.lightAngle = 0;
-        // this.lightAngle += 0.002; // 동적 태양 (원하면 활성화)
-
+        
         const lx = Math.sin(this.lightAngle) * 20 + 15;
         const lz = Math.cos(this.lightAngle) * 10 + 15;
         const lightPos = [lx, 30, lz];
         const lightDir = this.normalize(lightPos);
 
-        // 직교 투영 범위를 맵 크기에 맞게 설정
         const lightProj = this.getOrtho(-50, 50, -50, 50, 0.1, 100);
         const lightView = this.getLookAt(lightPos, [0, 0, 0], [0, 1, 0]);
         const lightMatrix = this.multiplyMatrices(lightProj, lightView);
@@ -300,8 +287,7 @@ export class Renderer {
         }
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
 
-        // ── 1. 바닥 (그림자 수신) ──────────────────────────────────
-        // 바닥을 납작하고 넓게 깔아 그림자가 선명하게 맺히도록 합니다.
+        // ── 1. 바닥 ──────────────────────────────────
         if (!isShadow) gl.uniform4fv(uColor, [0.30, 0.52, 0.28, 1.0]);
         const groundModel = new Float32Array([
             50, 0, 0, 0,
@@ -325,76 +311,63 @@ export class Renderer {
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
         }
 
-        // ── 3. 원격 플레이어 (인체 형태) ───────────────────────────
+        // ── 3. 원격 플레이어 ───────────────────────────
         if (remotePlayers) {
             for (const id in remotePlayers) {
                 const p = remotePlayers[id];
                 if (!p.pos) continue;
-                // yaw가 없으면 0으로 폴백
                 const yaw = (p.yaw !== undefined) ? p.yaw : 0;
                 this.drawHumanoid(gl, prog, uModel, uColor, isShadow,
                     p.pos[0], p.pos[1], p.pos[2], yaw,
-                    /* isEnemy */ true);
+                    true);
             }
+        }
+        
+        // ── 4. 로컬 플레이어 (나 자신도 화면에 표시할 경우) ────────────────
+        if (player && player.pos) {
+            const yaw = (player.yaw !== undefined) ? player.yaw : 0;
+            // 1인칭이라 내가 안 보여야 하면 이 블록은 지우셔도 됩니다.
+            this.drawHumanoid(gl, prog, uModel, uColor, isShadow,
+                player.pos[0], player.pos[1], player.pos[2], yaw,
+                false);
         }
     }
 
-    /**
-     * 큐브 여러 개로 조립한 인체 모델을 그립니다.
-     *
-     * 파츠 구성 (y 기준: 발바닥 = baseY):
-     *   머리   : 0.25 × 0.28 × 0.25  @  y+1.69
-     *   목     : 0.08 × 0.10 × 0.08  @  y+1.47
-     *   몸통   : 0.28 × 0.35 × 0.18  @  y+1.13
-     *   골반   : 0.24 × 0.16 × 0.16  @  y+0.73
-     *   팔(LR) : 0.10 × 0.30 × 0.10  @  y+1.05, ±0.42
-     *   전완(LR): 0.08 × 0.25 × 0.08 @  y+0.68, ±0.42
-     *   허벅지(LR):0.11×0.28×0.11    @  y+0.49, ±0.13
-     *   정강이(LR):0.09×0.26×0.09    @  y+0.15, ±0.13
-     *
-     * @param {boolean} isEnemy  true=적(빨강), false=아군(파랑)
-     */
     drawHumanoid(gl, prog, uModel, uColor, isShadow, bx, by, bz, yawDeg, isEnemy) {
-        // 팔 스윙 애니메이션용 타이머 (그냥 시간 기반)
         if (!this._t) this._t = 0;
         this._t += 0.04;
 
-        const swing = Math.sin(this._t) * 0.12;  // 팔 진폭
+        const swing = Math.sin(this._t) * 0.12;
         const legSwing = Math.sin(this._t) * 0.10;
+        
+        // [FIX 3] 워킹밥: 걷을 때 위아래로 몸이 살짝 뜁니다 (사인 그래프의 절댓값 이용)
+        const walkBob = Math.abs(Math.sin(this._t * 2)) * 0.05;
 
-        // 색상 팔레트
+        // [FIX 2] 공중 부양 해결: player.pos[1]이 1.0일 때 발끝이 0.0에 닿도록 0.92를 빼줍니다.
+        // 그리고 거기에 워킹밥(walkBob)을 더해줍니다.
+        const adjustedBy = by - 0.92 + walkBob;
+
         const skinColor  = [0.85, 0.70, 0.58, 1.0];
         const bodyColor  = isEnemy ? [0.80, 0.12, 0.12, 1.0] : [0.12, 0.30, 0.80, 1.0];
         const pantsColor = isEnemy ? [0.50, 0.08, 0.08, 1.0] : [0.08, 0.15, 0.50, 1.0];
         const shoeColor  = [0.18, 0.14, 0.10, 1.0];
 
-        /**
-         * 큐브 하나 그리기 (로컬 좌표 → 회전 → 월드 좌표)
-         * lx,ly,lz: 플레이어 중심 기준 로컬 오프셋
-         * sx,sy,sz: half-size
-         * yaw: 몸통 전체 회전 (Y축)
-         */
         const drawPart = (lx, ly, lz, sx, sy, sz, color) => {
             if (!isShadow) gl.uniform4fv(uColor, color);
 
             const rad = (yawDeg * Math.PI) / 180;
             const c = Math.cos(rad), s = Math.sin(rad);
 
-            // 로컬 오프셋을 yaw 회전 적용
+            // 로컬 오프셋에 회전 적용
             const rx = lx * c - lz * s;
             const rz = lx * s + lz * c;
 
             const wx = bx + rx;
-            const wy = by + ly;
+            const wy = adjustedBy + ly; // 보정된 Y값 사용
             const wz = bz + rz;
 
-            // Scale 행렬만 유지 (회전은 위치에 반영됨)
-            const m = new Float32Array([
-                sx, 0,  0,  0,
-                0,  sy, 0,  0,
-                0,  0,  sz, 0,
-                wx, wy, wz, 1
-            ]);
+            // [FIX 1] makeTRS를 이용해 모델 자체의 방향 회전까지 한 번에 적용
+            const m = this.makeTRS(wx, wy, wz, yawDeg, sx, sy, sz);
             gl.uniformMatrix4fv(uModel, false, m);
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
         };
@@ -403,17 +376,17 @@ export class Renderer {
         drawPart(0,    1.69, 0,    0.25, 0.28, 0.25, skinColor);
         // ── 목 ──
         drawPart(0,    1.47, 0,    0.08, 0.10, 0.08, skinColor);
-        // ── 몸통 (셔츠/재킷) ──
+        // ── 몸통 ──
         drawPart(0,    1.13, 0,    0.28, 0.35, 0.18, bodyColor);
         // ── 골반 ──
         drawPart(0,    0.73, 0,    0.24, 0.14, 0.16, pantsColor);
 
-        // ── 왼쪽 위팔 (swing) ──
+        // ── 왼쪽 위팔 ──
         drawPart(-0.42, 1.05 + swing, 0, 0.10, 0.28, 0.10, bodyColor);
         // ── 왼쪽 전완 ──
         drawPart(-0.42, 0.67 + swing * 0.5, 0, 0.08, 0.23, 0.08, skinColor);
 
-        // ── 오른쪽 위팔 (swing 반대) ──
+        // ── 오른쪽 위팔 ──
         drawPart( 0.42, 1.05 - swing, 0, 0.10, 0.28, 0.10, bodyColor);
         // ── 오른쪽 전완 ──
         drawPart( 0.42, 0.67 - swing * 0.5, 0, 0.08, 0.23, 0.08, skinColor);
