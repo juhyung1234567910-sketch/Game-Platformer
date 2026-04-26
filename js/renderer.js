@@ -210,7 +210,7 @@ export class Renderer {
         const lightPos  = [20, 40, 20];
         const lightDir  = this.norm(lightPos);
         const lightView = this.lookAt(lightPos, [0,0,0], [0,1,0]);
-        const lightProj = this.ortho(-55, 55, -55, 55, 0.1, 120);
+        const lightProj = this.ortho(-25, 25, -25, 25, 0.1, 120);
         const lightMVP  = this.mulMat(lightProj, lightView);
 
         // ── Pass 1: Shadow Map ─────────────────────────────────────
@@ -220,7 +220,7 @@ export class Renderer {
         gl.useProgram(this.shadowProg);
         
         // ✅ 수정: Shadow Acne 방지를 위해 앞면(FRONT)을 Cull
-        gl.cullFace(gl.FRONT);
+        gl.cullFace(gl.BACK);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeBuf);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
