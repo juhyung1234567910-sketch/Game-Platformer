@@ -23,6 +23,7 @@ export class Renderer {
             uniform mat4 uLightMVP, uModel;
             void main() { gl_Position = uLightMVP * uModel * aPos; }
         `;
+        
         const fsShadow = `
             precision highp float;
             void main() {
@@ -47,6 +48,7 @@ export class Renderer {
                 gl_Position  = uProj * uView * wp;
             }
         `;
+        
         const fsMain = `
             precision highp float;
             varying vec3 vNormal, vWorldPos;
@@ -67,15 +69,17 @@ export class Renderer {
                     proj.z > 1.0) return 1.0;
 
                 float cosTheta = clamp(dot(n, ld), 0.0, 1.0);
-                float bias = mix(0.001, 0.012, cosTheta);
+                // ✅ 수정: 비스듬할수록 bias 증가, 최대값 대폭 감소
+                float bias = max(0.002 * (1.0 - cosTheta), 0.0005);
 
                 float shadow = 0.0;
                 float texel  = 1.0 / 2048.0;
 
-                for (float x = -2.0; x <= 2.0; x += 1.0) {
-                    for (float y = -2.0; y <= 2.0; y += 1.0) {
-                        float storedDepth = unpack(
-                            texture2D(uShadowMap, proj.xy + vec2(x,y) * texel));
+                // ✅ 수정: 모바일/엄격한 WebGL 호환성을 위해 루프를 정수형으로 변경
+                for (int x = -2; x <= 2; x++) {
+                    for (int y = -2; y <= 2; y++) {
+                        vec2 offset = vec2(float(x), float(y)) * texel;
+                        float storedDepth = unpack(texture2D(uShadowMap, proj.xy + offset));
                         shadow += (proj.z - bias > storedDepth) ? 0.30 : 1.0;
                     }
                 }
@@ -127,8 +131,10 @@ export class Renderer {
         gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
             this.shadowSize, this.shadowSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            
+        // ✅ 수정: Packed Depth 보간 방지를 위해 NEAREST로 설정
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
@@ -169,9 +175,6 @@ export class Renderer {
     }
 
     // ── 행렬 수학 ──────────────────────────────────────────────────
-    // ✅ 핵심 수정: column-major 행렬 곱 올바른 구현
-    // 기존 코드는 row/column이 뒤바뀐 잘못된 곱으로 lightMVP가 완전히 틀렸음
-    // → 바닥 depth가 -24 같은 말도 안 되는 값으로 계산되어 그림자 불가
     mulMat(a, b) {
         const r = new Float32Array(16);
         for (let col = 0; col < 4; col++)
@@ -211,11 +214,13 @@ export class Renderer {
         const lightMVP  = this.mulMat(lightProj, lightView);
 
         // ── Pass 1: Shadow Map ─────────────────────────────────────
-        // 바닥은 제외 (self-shadow 방지), 박스·캐릭터만 caster
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
         gl.viewport(0, 0, this.shadowSize, this.shadowSize);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.shadowProg);
+        
+        // ✅ 수정: Shadow Acne 방지를 위해 앞면(FRONT)을 Cull
+        gl.cullFace(gl.FRONT);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeBuf);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
@@ -246,6 +251,9 @@ export class Renderer {
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.mainProg);
+
+        // ✅ 수정: 메인 씬 렌더링 시에는 정상적으로 뒷면(BACK)을 Cull
+        gl.cullFace(gl.BACK);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
