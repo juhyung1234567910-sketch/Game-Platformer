@@ -253,7 +253,7 @@ export class Renderer {
         gl.useProgram(this.mainProg);
 
         // ✅ 수정: 메인 씬 렌더링 시에는 정상적으로 뒷면(BACK)을 Cull
-        gl.cullFace(gl.BACK);
+        gl.cullFace(gl.FRONT);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
