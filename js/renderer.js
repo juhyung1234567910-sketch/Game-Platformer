@@ -23,7 +23,6 @@ export class Renderer {
             uniform mat4 uLightMVP, uModel;
             void main() { gl_Position = uLightMVP * uModel * aPos; }
         `;
-        
         const fsShadow = `
             precision highp float;
             void main() {
@@ -48,7 +47,6 @@ export class Renderer {
                 gl_Position  = uProj * uView * wp;
             }
         `;
-        
         const fsMain = `
             precision highp float;
             varying vec3 vNormal, vWorldPos;
@@ -68,14 +66,13 @@ export class Renderer {
                     proj.y < 0.0 || proj.y > 1.0 ||
                     proj.z > 1.0) return 1.0;
 
+                // bias: 광원과 법선 각도가 클수록(비스듬할수록) 크게
                 float cosTheta = clamp(dot(n, ld), 0.0, 1.0);
-                // ✅ 수정: 비스듬할수록 bias 증가, 최대값 대폭 감소
                 float bias = max(0.002 * (1.0 - cosTheta), 0.001);
 
                 float shadow = 0.0;
                 float texel  = 1.0 / 2048.0;
 
-                // ✅ 수정: 모바일/엄격한 WebGL 호환성을 위해 루프를 정수형으로 변경
                 for (int x = -2; x <= 2; x++) {
                     for (int y = -2; y <= 2; y++) {
                         vec2 offset = vec2(float(x), float(y)) * texel;
@@ -131,8 +128,7 @@ export class Renderer {
         gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
             this.shadowSize, this.shadowSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-            
-        // ✅ 수정: Packed Depth 보간 방지를 위해 NEAREST로 설정
+        // NEAREST: packed depth값이 보간되면 unpack 결과가 깨짐
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -218,9 +214,12 @@ export class Renderer {
         gl.viewport(0, 0, this.shadowSize, this.shadowSize);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.shadowProg);
-        
-        // ✅ 수정: Shadow Acne 방지를 위해 앞면(FRONT)을 Cull
-        gl.cullFace(gl.BACK);
+
+        // ✅ shadow pass: FRONT face cull → 뒷면만 depth 기록
+        //    → Peter Panning(그림자가 물체에서 떨어지는 현상) 방지
+        //    바닥은 thin mesh라 FRONT cull 시 아무것도 안 그려지므로
+        //    shadow caster에서 제외해도 됨 (self-shadow 없음)
+        gl.cullFace(gl.FRONT);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeBuf);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
@@ -232,6 +231,7 @@ export class Renderer {
 
         const uModelS = gl.getUniformLocation(this.shadowProg, "uModel");
 
+        // 박스만 caster (바닥 제외 - self-shadow 방지)
         for (const box of mapData) {
             gl.uniformMatrix4fv(uModelS, false, this._scaleM(...box.pos, ...box.scale));
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
@@ -252,7 +252,7 @@ export class Renderer {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.mainProg);
 
-        // ✅ 수정: 메인 씬 렌더링 시에는 정상적으로 뒷면(BACK)을 Cull
+        // ✅ 메인 패스는 반드시 BACK으로 복구
         gl.cullFace(gl.BACK);
 
         gl.activeTexture(gl.TEXTURE0);
