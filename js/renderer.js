@@ -24,18 +24,13 @@ export class Renderer {
             uniform mat4 uLightMVP, uModel;
             void main() { gl_Position = uLightMVP * uModel * aPos; }
         `;
-        // ✅ pack/unpack 일관성 수정: r=정수부, g=1/256, b=1/65536, a=1/16777216
         const fsShadow = `
             precision highp float;
-            vec4 packDepth(float depth) {
-                const vec4 bitShift = vec4(1.0, 256.0, 256.0*256.0, 256.0*256.0*256.0);
-                const vec4 bitMask  = vec4(1.0/256.0, 1.0/256.0, 1.0/256.0, 0.0);
-                vec4 enc = fract(depth * bitShift);
-                enc -= enc.yzww * bitMask;
-                return enc;
-            }
             void main() {
-                gl_FragColor = packDepth(gl_FragCoord.z);
+                float d = gl_FragCoord.z;
+                vec4 s  = vec4(1.0, 256.0, 65536.0, 16777216.0);
+                vec4 r  = fract(d * s);
+                gl_FragColor = r - r.yzww * vec4(1.0/256.0, 1.0/256.0, 1.0/256.0, 0.0);
             }
         `;
 
@@ -62,22 +57,23 @@ export class Renderer {
             uniform vec3      uCamPos, uLightDir;
             uniform sampler2D uShadowMap;
 
-            // ✅ pack과 동일한 비트 순서로 복원
-            float unpackDepth(vec4 rgba) {
-                const vec4 bitShift = vec4(1.0, 1.0/256.0, 1.0/(256.0*256.0), 1.0/(256.0*256.0*256.0));
-                return dot(rgba, bitShift);
+            float unpack(vec4 c) {
+                return dot(c, vec4(1.0, 1.0/256.0, 1.0/65536.0, 1.0/16777216.0));
             }
 
             float shadowFactor(vec4 sc, vec3 n, vec3 ld) {
                 vec3 proj = sc.xyz / sc.w * 0.5 + 0.5;
 
-                // ✅ proj.z > 1.0 제거: 이 조건이 바닥을 항상 밝게 만들던 원인
                 if (proj.x < 0.0 || proj.x > 1.0 ||
-                    proj.y < 0.0 || proj.y > 1.0) return 1.0;
+                    proj.y < 0.0 || proj.y > 1.0 ||
+                    proj.z > 1.0) return 1.0;
 
-                // 동적 bias: 법선-광원 각도로 shadow acne 방지
+                // ✅ 핵심 수정:
+                // 바닥처럼 법선이 광원을 정면으로 향할수록(cosTheta→1)
+                // bias를 크게 줘야 self-shadowing(acne)을 막을 수 있음.
+                // 기존 코드는 반대로 cosTheta 높을수록 bias를 작게 줬음.
                 float cosTheta = clamp(dot(n, ld), 0.0, 1.0);
-                float bias = mix(0.008, 0.001, cosTheta);
+                float bias = mix(0.001, 0.012, cosTheta);
 
                 float shadow = 0.0;
                 float texel  = 1.0 / 2048.0;
@@ -85,7 +81,7 @@ export class Renderer {
                 // PCF 5x5
                 for (float x = -2.0; x <= 2.0; x += 1.0) {
                     for (float y = -2.0; y <= 2.0; y += 1.0) {
-                        float storedDepth = unpackDepth(
+                        float storedDepth = unpack(
                             texture2D(uShadowMap, proj.xy + vec2(x,y) * texel));
                         shadow += (proj.z - bias > storedDepth) ? 0.30 : 1.0;
                     }
@@ -214,11 +210,13 @@ export class Renderer {
         const lightPos  = [20, 40, 20];
         const lightDir  = this.norm(lightPos);
         const lightView = this.lookAt(lightPos, [0,0,0], [0,1,0]);
-        // ✅ near=0.1, far=120으로 바닥까지 depth 범위 완전히 커버
         const lightProj = this.ortho(-55, 55, -55, 55, 0.1, 120);
         const lightMVP  = this.mulMat(lightProj, lightView);
 
         // ── Pass 1: Shadow Map ─────────────────────────────────────
+        // ✅ 바닥은 shadow map에서 제외: 바닥이 자기 깊이를 쓰면
+        //    자기 자신과 비교해서 항상 self-shadow(acne) 발생.
+        //    바닥은 receiver만 되고 caster는 박스/캐릭터만.
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
         gl.viewport(0, 0, this.shadowSize, this.shadowSize);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -234,14 +232,12 @@ export class Renderer {
 
         const uModelS = gl.getUniformLocation(this.shadowProg, "uModel");
 
-        // ✅ 바닥도 shadow map에 포함
-        gl.uniformMatrix4fv(uModelS, false, this._scaleM(0,-0.01,0, 60,0.01,60));
-        gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
-
+        // 맵 박스만 shadow caster (바닥 제외)
         for (const box of mapData) {
             gl.uniformMatrix4fv(uModelS, false, this._scaleM(...box.pos, ...box.scale));
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
         }
+        // 원격 플레이어 shadow caster
         if (remotePlayers) {
             for (const id in remotePlayers) {
                 const p = remotePlayers[id];
@@ -282,7 +278,7 @@ export class Renderer {
         const uModelM = gl.getUniformLocation(this.mainProg, "uModel");
         const uColorM = gl.getUniformLocation(this.mainProg, "uColor");
 
-        // 바닥
+        // 바닥 (shadow receiver만, caster 아님)
         gl.uniform4fv(uColorM, [0.28, 0.50, 0.24, 1.0]);
         gl.uniformMatrix4fv(uModelM, false, this._scaleM(0,-0.01,0, 60,0.01,60));
         gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
