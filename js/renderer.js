@@ -211,6 +211,10 @@ export class Renderer {
         // ── Pass 1: Shadow Map ─────────────────────────────────────
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
         gl.viewport(0, 0, this.shadowSize, this.shadowSize);
+        // ✅ shadow map은 흰색(1,1,1,1)으로 clear해야 함
+        // clear값(0,0,0,0)을 unpack하면 depth=0 → 모든 픽셀이 "가려짐"으로 판정
+        // 흰색(1,1,1,1)을 unpack하면 depth≈1 → 아무것도 없는 곳은 그림자 안 생김
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.shadowProg);
 
@@ -252,6 +256,8 @@ export class Renderer {
         // ── Pass 2: Main ───────────────────────────────────────────
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+        // ✅ 메인 패스 전에 하늘색으로 복구
+        gl.clearColor(0.53, 0.81, 0.98, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.mainProg);
 
