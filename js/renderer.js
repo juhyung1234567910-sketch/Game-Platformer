@@ -210,7 +210,7 @@ export class Renderer {
         const lightPos  = [20, 40, 20];
         const lightDir  = this.norm(lightPos);
         const lightView = this.lookAt(lightPos, [0,0,0], [0,1,0]);
-        const lightProj = this.ortho(-25, 25, -25, 25, 0.1, 120);
+        const lightProj = this.ortho(-55, 55, -55, 55, 0.1, 120);
         const lightMVP  = this.mulMat(lightProj, lightView);
 
         // ── Pass 1: Shadow Map ─────────────────────────────────────
