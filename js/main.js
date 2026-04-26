@@ -1,5 +1,18 @@
+/*
+  물리 기반 맵 설계 수치 (60fps 기준):
+    jumpForce = 0.2,  gravity = -0.5 * dt
+    → 최대 점프 상승: +2.3 units
+    → 체공 시간: ~0.8s
+    → 체공 중 최대 수평 이동: speed(7) × 0.8 = 5.6 units
+
+  올라갈 수 있는 플랫폼 윗면 최대 y: 1.0 + 2.3 − 0.1 = 3.2
+  안전 점프 gap: ≤ 4.0 units
+  도전 점프 gap: 4.5 ~ 5.0 units
+  불가능 gap:   ≥ 5.6 units
+*/
+
 window.onerror = function(msg, url, line) {
-    console.error("에러 발생: " + msg + "\n위치: " + url + ":" + line);
+    console.error("에러: " + msg + " @ " + url + ":" + line);
     return false;
 };
 
@@ -20,28 +33,86 @@ const firebaseConfig = {
 
 class Game {
     constructor() {
-        // 1. 캔버스
         this.canvas        = document.getElementById('gameCanvas');
         this.canvas.width  = window.innerWidth;
         this.canvas.height = window.innerHeight;
 
-        // 2. 핵심 객체
         this.player   = new Player();
         this.camera   = new Camera();
         this.renderer = new Renderer(this.canvas);
         this.network  = new NetworkClient(firebaseConfig);
 
-        // 3. 상태
         this.keys     = {};
         this.lastTime = performance.now();
 
-        // 4. 맵 데이터
+        // ─────────────────────────────────────────────────────────
+        // 맵 데이터 — 물리값 기반 설계
+        //
+        //  tag 값:
+        //    'wall'      → 이동 차단 수직 벽
+        //    'platform'  → 올라설 수 있는 플랫폼 (윗면 y ≤ 3.2)
+        //    'ramp'      → 경사로처럼 쓰는 얕은 단차
+        //    없음(기본)  → 일반 박스
+        //
+        //  스폰: [0, 2, 5] — 중앙 남쪽
+        // ─────────────────────────────────────────────────────────
         this.mapData = [
-            { pos: [8,   1,  8],  scale: [1,   1,  1]  },
-            { pos: [-8,  1,  0],  scale: [2,   1,  2]  },
-            { pos: [0,   1, -15], scale: [15,  1,  1]  },
-            { pos: [15,  2,  0],  scale: [1,   2, 10]  },
-            { pos: [0,   0.5, 0], scale: [3, 0.5,  3]  }
+
+            // ── 외곽 경계 벽 (맵 밖으로 나가지 못하도록) ─────────
+            // 북벽  z=-28, 동벽 x=28, 서벽 x=-28, 남벽 z=28
+            { pos:[  0, 3,-28], scale:[28,3,0.5], tag:'wall' },
+            { pos:[  0, 3, 28], scale:[28,3,0.5], tag:'wall' },
+            { pos:[ 28, 3,  0], scale:[0.5,3,28], tag:'wall' },
+            { pos:[-28, 3,  0], scale:[0.5,3,28], tag:'wall' },
+
+            // ── 중앙 구조물 ───────────────────────────────────────
+            // 중앙 낮은 단상 (올라갈 수 있음: 윗면 y=1.5)
+            { pos:[0, 0.75, 0], scale:[4,0.75,4] },
+
+            // 중앙 단상 위 작은 박스 (엄폐물)
+            { pos:[ 2, 1.75, 0], scale:[0.6,0.5,0.6], tag:'wall' },
+            { pos:[-2, 1.75, 0], scale:[0.6,0.5,0.6], tag:'wall' },
+
+            // ── 북쪽 계단식 플랫폼 ───────────────────────────────
+            // 1단: 윗면 y=2.0 → 점프로 올라갈 수 있음
+            { pos:[0, 1.0,-8],  scale:[3,1.0,3], tag:'platform' },
+            // 2단: 윗면 y=3.0 → 1단 위에서 점프해야 도달 (2.0→3.0: +1.0, 가능)
+            { pos:[0, 1.5,-14], scale:[2.5,1.5,2.5], tag:'platform' },
+            // 3단: 윗면 y=3.0 → 측면 이동 플랫폼
+            { pos:[6, 1.5,-14], scale:[2,1.5,2], tag:'platform' },
+
+            // ── 동쪽 높은 벽·엄폐물 ─────────────────────────────
+            // 낮은 엄폐벽 (윗면 y=2.4 → 못 올라감, 엄폐 전용)
+            { pos:[12, 1.2, 0],  scale:[0.5,1.2,6], tag:'wall' },
+            // 플랫폼 (윗면 y=2.0)
+            { pos:[18, 1.0,-6],  scale:[3,1.0,3], tag:'platform' },
+            // 높은 탑 (엄폐물, 못 올라감)
+            { pos:[22, 2.5, 6],  scale:[2,2.5,2], tag:'wall' },
+
+            // ── 서쪽 구조물 ──────────────────────────────────────
+            // 낮은 플랫폼 (윗면 y=1.5)
+            { pos:[-10, 0.75,-5], scale:[3,0.75,3], tag:'platform' },
+            // 중간 플랫폼 (윗면 y=2.5) — 낮은 플랫폼에서 점프
+            { pos:[-16, 1.25,-5], scale:[2.5,1.25,2.5], tag:'platform' },
+            // 서쪽 엄폐벽
+            { pos:[-12, 1.5, 8],  scale:[0.5,1.5,5], tag:'wall' },
+
+            // ── 남쪽 장애물 코스 ─────────────────────────────────
+            // 디딤돌 A (윗면 y=2.0, gap=4 → 안전 점프)
+            { pos:[-4, 1.0, 14], scale:[2,1.0,2], tag:'platform' },
+            // 디딤돌 B (윗면 y=2.0, gap=4)
+            { pos:[ 4, 1.0, 14], scale:[2,1.0,2], tag:'platform' },
+            // 디딤돌 C — 높이 다름 (윗면 y=3.0, 디딤돌A에서 점프)
+            { pos:[0, 1.5, 20],  scale:[2,1.5,2], tag:'platform' },
+
+            // ── 중앙-북 연결 경사 단차 (낮은 단) ─────────────────
+            { pos:[0, 0.4,-4],   scale:[2,0.4,1.5], tag:'ramp' },
+
+            // ── 산발적 엄폐 박스들 ───────────────────────────────
+            { pos:[ 6, 0.6, 6],  scale:[1.2,0.6,1.2] },
+            { pos:[-6, 0.6, 6],  scale:[1.2,0.6,1.2] },
+            { pos:[ 6, 0.6,-4],  scale:[1.2,0.6,1.2] },
+            { pos:[-6, 0.6,-4],  scale:[1.2,0.6,1.2] },
         ];
 
         this.initEvents();
@@ -55,64 +126,46 @@ class Game {
             this.canvas.height = window.innerHeight;
         });
 
-        this.canvas.addEventListener('click', () => {
-            this.canvas.requestPointerLock();
-        });
+        this.canvas.addEventListener('click', () => this.canvas.requestPointerLock());
 
         document.addEventListener('mousemove', (e) => {
-            if (document.pointerLockElement === this.canvas) {
-                // Player.rotate() 로 통일 — yaw/pitch 관리 일원화
+            if (document.pointerLockElement === this.canvas)
                 this.player.rotate(e.movementX, e.movementY, 0.10);
-            }
         });
 
         document.addEventListener('keydown', (e) => {
             this.keys[e.key] = true;
-            // 재장전: startReload() 단일 진입점 사용 (Player 내부와 중복 없음)
-            if (e.key === 'r' || e.key === 'R') {
-                this.player.startReload();
-            }
+            if (e.key === 'r' || e.key === 'R') this.player.startReload();
         });
 
-        document.addEventListener('keyup', (e) => {
-            this.keys[e.key] = false;
-        });
+        document.addEventListener('keyup', (e) => { this.keys[e.key] = false; });
     }
 
     loop(timestamp) {
         const dt = Math.min((timestamp - this.lastTime) / 1000.0, 0.1);
         this.lastTime = timestamp;
 
-        // 다른 플레이어 접속 로그 (alert 제거 — 루프를 멈추는 버그 수정)
         if (!this._joinLogged &&
             this.network.remotePlayers &&
             Object.keys(this.network.remotePlayers).length > 0) {
-            console.log("다른 플레이어 발견!:",
-                Object.keys(this.network.remotePlayers).length, "명");
+            console.log("다른 플레이어:", Object.keys(this.network.remotePlayers).length, "명");
             this._joinLogged = true;
         }
 
-        // 1. 사망/리스폰 체크
         this.player.checkDeathAndRespawn(this.network);
 
-        // 2. 카메라·이동벡터 계산
         const camData = this.camera.updateAndGetMatrices(
             this.player, this.canvas.width, this.canvas.height
         );
 
-        // 3. 플레이어 물리 업데이트
-        //    - network 인자 전달 → Player 내부에서 주기적 동기화 전송
-        //    - 재장전 타이머는 Player.update() 내부에서만 처리 (중복 제거)
         this.player.update(
             dt, this.keys, camData.front, camData.right, this.mapData, this.network
         );
 
-        // 4. 렌더링
         this.renderer.drawWorld(
             this.player, camData, this.network.remotePlayers, this.mapData
         );
 
-        // 5. 1인칭 무기 렌더링 (선택적)
         if (this.camera.isFirstPerson &&
             typeof this.renderer.drawFirstPersonWeapon === 'function') {
             this.renderer.drawFirstPersonWeapon(
