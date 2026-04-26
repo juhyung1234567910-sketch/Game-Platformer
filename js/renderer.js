@@ -19,7 +19,6 @@ export class Renderer {
         const gl = this.gl;
 
         // ── Shadow Pass ──────────────────────────────────────────
-        // 바닥/박스/캐릭터의 깊이를 RGBA에 팩킹해서 저장
         const vsShadow = `
             attribute vec4 aPos;
             uniform mat4 uLightMVP, uModel;
@@ -63,16 +62,18 @@ export class Renderer {
             }
 
             float shadowFactor(vec4 sc, vec3 n, vec3 ld) {
-                // NDC → [0,1] 텍스처 좌표 변환
                 vec3 proj = sc.xyz / sc.w * 0.5 + 0.5;
 
-                // 그림자맵 범위 밖은 밝게 처리
+                // ✅ proj.z > 1.0 조건 제거: 바닥처럼 depth가 far에 근접한 경우
+                //    이 조건이 항상 참이 되어 그림자가 전혀 안 생기던 버그 수정
                 if (proj.x < 0.0 || proj.x > 1.0 ||
-                    proj.y < 0.0 || proj.y > 1.0 ||
-                    proj.z > 1.0) return 1.0;
+                    proj.y < 0.0 || proj.y > 1.0) return 1.0;
 
-                // 바닥처럼 법선이 광원을 향할수록 bias 작게
-                float bias   = max(0.005 * (1.0 - dot(n, ld)), 0.0005);
+                // ✅ bias: 법선과 광원 각도로 동적 조정
+                //    바닥(수평면)은 cosTheta가 작아 bias를 크게 → acne 방지
+                float cosTheta = clamp(dot(n, ld), 0.0, 1.0);
+                float bias = mix(0.005, 0.0005, cosTheta);
+
                 float shadow = 0.0;
                 float texel  = 1.0 / 2048.0;
 
@@ -97,9 +98,9 @@ export class Renderer {
                 float diff = max(dot(n, ld), 0.0);
                 float spec = pow(max(dot(n, h), 0.0), 64.0);
 
-                vec3 col = uColor.rgb * 0.38                     // ambient
-                         + (uColor.rgb * diff + vec3(0.4)*spec)  // diffuse+spec
-                           * sh;                                  // × 그림자
+                vec3 col = uColor.rgb * 0.38
+                         + (uColor.rgb * diff + vec3(0.4)*spec)
+                           * sh;
                 gl_FragColor = vec4(col, uColor.a);
             }
         `;
@@ -209,19 +210,18 @@ export class Renderer {
         const lightPos  = [20, 40, 20];
         const lightDir  = this.norm(lightPos);
         const lightView = this.lookAt(lightPos, [0,0,0], [0,1,0]);
-        // 직교 투영 범위: 맵 전체(±45) + 충분한 depth(0~110)
-        const lightProj = this.ortho(-45, 45, -45, 45, 1, 110);
+
+        // ✅ near=0.1로 줄이고 far=120으로 늘려 바닥까지 depth 범위 커버
+        //    ortho 범위도 ±55로 넓혀 맵 전체(바닥 60x60)를 안전하게 포함
+        const lightProj = this.ortho(-55, 55, -55, 55, 0.1, 120);
         const lightMVP  = this.mulMat(lightProj, lightView);
 
         // ── Pass 1: Shadow Map 생성 ────────────────────────────────
-        // 바닥을 제외한 모든 오브젝트(박스, 캐릭터)를 그려 깊이 기록
-        // 바닥 자체는 shadow CASTER가 아닌 RECEIVER이므로 여기서 제외
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
         gl.viewport(0, 0, this.shadowSize, this.shadowSize);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.shadowProg);
 
-        // 버텍스 속성 (shadow pass는 aPos만 필요)
         gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeBuf);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
         const aPosS = gl.getAttribLocation(this.shadowProg, "aPos");
@@ -232,7 +232,12 @@ export class Renderer {
 
         const uModelS = gl.getUniformLocation(this.shadowProg, "uModel");
 
-        // 맵 박스들만 shadow caster (바닥 제외)
+        // ✅ 바닥도 shadow map에 포함: receiver도 자기 깊이를 기록해야
+        //    shadow caster(캐릭터, 박스)의 깊이와 비교가 가능함
+        gl.uniformMatrix4fv(uModelS, false, this._scaleM(0,-0.01,0, 60,0.01,60));
+        gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+
+        // 맵 박스들
         for (const box of mapData) {
             gl.uniformMatrix4fv(uModelS, false, this._scaleM(...box.pos, ...box.scale));
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
@@ -242,8 +247,7 @@ export class Renderer {
             for (const id in remotePlayers) {
                 const p = remotePlayers[id];
                 if (!p.pos) continue;
-                // pos[1]이 발바닥 기준(y=1.0이 바닥면) → 세계 y좌표 보정
-                const footY = p.pos[1] - 1.0; // 바닥이 0이 되도록 오프셋
+                const footY = p.pos[1] - 1.0;
                 this._drawHumanoidParts(uModelS, null,
                     p.pos[0], footY, p.pos[2], p.yaw ?? 0, p.pitch ?? 0, true, true);
             }
@@ -267,7 +271,6 @@ export class Renderer {
         gl.uniformMatrix4fv(
             gl.getUniformLocation(this.mainProg, "uProj"), false, cam.projectionMatrix);
 
-        // 버텍스 속성
         gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeBuf);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
         const aPosM    = gl.getAttribLocation(this.mainProg, "aPos");
@@ -280,9 +283,7 @@ export class Renderer {
         const uModelM = gl.getUniformLocation(this.mainProg, "uModel");
         const uColorM = gl.getUniformLocation(this.mainProg, "uColor");
 
-        // ── 바닥: shadow RECEIVER, caster는 아님 ──────────────────
-        // y=0 평면, 아주 얇게 (두께 0.02)
-        // 박스 중심이 y=-0.01 → 위 표면이 y=0 (발바닥 기준면)
+        // ── 바닥 ──────────────────────────────────────────────────
         gl.uniform4fv(uColorM, [0.28, 0.50, 0.24, 1.0]);
         gl.uniformMatrix4fv(uModelM, false, this._scaleM(0,-0.01,0, 60,0.01,60));
         gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
@@ -303,8 +304,6 @@ export class Renderer {
             for (const id in remotePlayers) {
                 const p = remotePlayers[id];
                 if (!p.pos) continue;
-                // pos[1]은 Player.pos[1] = 바닥면에서의 발바닥 y (최소 1.0)
-                // 세계 y=0이 바닥이므로 footY = pos[1] - 1.0
                 const footY = p.pos[1] - 1.0;
                 this._drawHumanoidParts(uModelM, uColorM,
                     p.pos[0], footY, p.pos[2],
@@ -320,54 +319,29 @@ export class Renderer {
     }
 
     // ── 인체 모델 ─────────────────────────────────────────────────
-    //
-    //  footY  : 발바닥의 실제 세계 y좌표 (= pos[1] - 1.0)
-    //           바닥이 y=0이므로 발이 땅에 딱 붙음
-    //  yawDeg : 몸통 좌우 회전 (서버에서 받은 값)
-    //  pitchDeg: 머리/상체 상하 기울기 (서버에서 받은 값)
-    //            ─ 머리와 상체 회전에만 적용, 하체는 yaw만
-    //
-    //  파츠 로컬 y 오프셋 (발바닥=0 기준):
-    //    발      0.00 ~ 0.06
-    //    정강이  0.08 ~ 0.54
-    //    허벅지  0.55 ~ 1.00
-    //    골반    0.89 ~ 1.16
-    //    몸통    1.15 ~ 1.80
-    //    팔/전완 0.80 ~ 1.35
-    //    목      1.78 ~ 1.96
-    //    머리    1.96 ~ 2.50
-    // ──────────────────────────────────────────────────────────────
     _drawHumanoidParts(uModel, uColor, bx, footY, bz, yawDeg, pitchDeg, isEnemy, isShadow) {
         const gl = this.gl;
 
-        // 애니메이션 타이머 (걷기 흔들림)
         if (!this._animT) this._animT = 0;
         this._animT += 0.04;
-        const sw  = Math.sin(this._animT) * 0.09;  // 팔 스윙
-        const lsw = Math.sin(this._animT) * 0.08;  // 다리 스윙
+        const sw  = Math.sin(this._animT) * 0.09;
+        const lsw = Math.sin(this._animT) * 0.08;
 
-        // 색상
         const skin  = [0.88, 0.72, 0.60, 1.0];
         const shirt = isEnemy ? [0.80,0.12,0.12,1.0] : [0.15,0.35,0.80,1.0];
         const pants = isEnemy ? [0.48,0.08,0.08,1.0] : [0.08,0.18,0.52,1.0];
         const shoe  = [0.20, 0.16, 0.11, 1.0];
 
-        // yaw 회전 (Y축) — 몸 전체
         const yr  = yawDeg   * Math.PI / 180;
         const cy  = Math.cos(yr), sy = Math.sin(yr);
 
-        // pitch 회전 (X축) — 상체·머리에만 적용
-        // 실제 FPS에서 pitch는 머리 각도이므로 상체는 절반만 기울임
         const pr   = pitchDeg * Math.PI / 180;
         const cp   = Math.cos(pr), sp = Math.sin(pr);
-        const cph  = Math.cos(pr * 0.5), sph = Math.sin(pr * 0.5); // 상체용 절반
+        const cph  = Math.cos(pr * 0.5), sph = Math.sin(pr * 0.5);
 
-        // 로컬 → 월드 변환 (yaw 회전 후 이동)
-        // 상체 파츠: pitch도 추가 적용
         const drawPart = (lx, ly, lz, sx, sy2, sz, color, applyPitch, pitchCos, pitchSin) => {
             if (!isShadow && uColor) gl.uniform4fv(uColor, color);
 
-            // yaw 회전
             const rx = lx * cy - lz * sy;
             const rz = lx * sy + lz * cy;
 
@@ -375,12 +349,10 @@ export class Renderer {
             let wy = footY + ly;
             let wz = bz + rz;
 
-            // pitch: 몸통 중심(y=1.3)을 축으로 상하 회전
             if (applyPitch) {
                 const pivotY = footY + 1.30;
                 const dy     = wy - pivotY;
-                const dz_rot = wz - bz; // 피봇 z 기준
-                // x축 회전: y' = dy*cos - dz*sin, z' = dy*sin + dz*cos
+                const dz_rot = wz - bz;
                 wy = pivotY + dy * pitchCos - dz_rot * pitchSin;
                 wz = bz     + dy * pitchSin + dz_rot * pitchCos;
             }
@@ -390,27 +362,27 @@ export class Renderer {
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
         };
 
-        const B  = false; // pitch 없음
-        const UP = true;  // pitch 있음 (상체/머리)
+        const B  = false;
+        const UP = true;
 
         // ── 하체 (yaw만) ──────────────────────────────────────────
-        drawPart(-0.13, 0.50+lsw,     0, 0.11,0.24,0.11, pants, B,  1,0); // 왼 허벅지
-        drawPart(-0.13, 0.14+lsw*0.5, 0, 0.09,0.22,0.09, pants, B,  1,0); // 왼 정강이
-        drawPart(-0.13,-0.01,       0.04, 0.10,0.06,0.13, shoe,  B,  1,0); // 왼발
-        drawPart( 0.13, 0.50-lsw,     0, 0.11,0.24,0.11, pants, B,  1,0); // 오른 허벅지
-        drawPart( 0.13, 0.14-lsw*0.5, 0, 0.09,0.22,0.09, pants, B,  1,0); // 오른 정강이
-        drawPart( 0.13,-0.01,       0.04, 0.10,0.06,0.13, shoe,  B,  1,0); // 오른발
-        drawPart( 0,    0.76,          0, 0.22,0.13,0.15, pants, B,  1,0); // 골반
+        drawPart(-0.13, 0.50+lsw,     0, 0.11,0.24,0.11, pants, B,  1,0);
+        drawPart(-0.13, 0.14+lsw*0.5, 0, 0.09,0.22,0.09, pants, B,  1,0);
+        drawPart(-0.13,-0.01,       0.04, 0.10,0.06,0.13, shoe,  B,  1,0);
+        drawPart( 0.13, 0.50-lsw,     0, 0.11,0.24,0.11, pants, B,  1,0);
+        drawPart( 0.13, 0.14-lsw*0.5, 0, 0.09,0.22,0.09, pants, B,  1,0);
+        drawPart( 0.13,-0.01,       0.04, 0.10,0.06,0.13, shoe,  B,  1,0);
+        drawPart( 0,    0.76,          0, 0.22,0.13,0.15, pants, B,  1,0);
 
         // ── 상체 (yaw + pitch 절반) ───────────────────────────────
-        drawPart( 0,    1.15,          0, 0.27,0.33,0.17, shirt, UP, cph,sph); // 몸통
-        drawPart(-0.40, 1.08+sw,       0, 0.10,0.27,0.10, shirt, UP, cph,sph); // 왼팔
-        drawPart(-0.40, 0.68+sw*0.5,   0, 0.08,0.22,0.08, skin,  UP, cph,sph); // 왼 전완
-        drawPart( 0.40, 1.08-sw,       0, 0.10,0.27,0.10, shirt, UP, cph,sph); // 오른팔
-        drawPart( 0.40, 0.68-sw*0.5,   0, 0.08,0.22,0.08, skin,  UP, cph,sph); // 오른 전완
+        drawPart( 0,    1.15,          0, 0.27,0.33,0.17, shirt, UP, cph,sph);
+        drawPart(-0.40, 1.08+sw,       0, 0.10,0.27,0.10, shirt, UP, cph,sph);
+        drawPart(-0.40, 0.68+sw*0.5,   0, 0.08,0.22,0.08, skin,  UP, cph,sph);
+        drawPart( 0.40, 1.08-sw,       0, 0.10,0.27,0.10, shirt, UP, cph,sph);
+        drawPart( 0.40, 0.68-sw*0.5,   0, 0.08,0.22,0.08, skin,  UP, cph,sph);
 
         // ── 머리·목 (yaw + pitch 풀) ─────────────────────────────
-        drawPart( 0,    1.50,          0, 0.08,0.09,0.08, skin,  UP, cp, sp);  // 목
-        drawPart( 0,    1.72,          0, 0.24,0.27,0.24, skin,  UP, cp, sp);  // 머리
+        drawPart( 0,    1.50,          0, 0.08,0.09,0.08, skin,  UP, cp, sp);
+        drawPart( 0,    1.72,          0, 0.24,0.27,0.24, skin,  UP, cp, sp);
     }
 }
