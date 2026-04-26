@@ -70,7 +70,7 @@ export class Renderer {
 
                 float cosTheta = clamp(dot(n, ld), 0.0, 1.0);
                 // ✅ 수정: 비스듬할수록 bias 증가, 최대값 대폭 감소
-                float bias = max(0.002 * (1.0 - cosTheta), 0.0005);
+                float bias = max(0.002 * (1.0 - cosTheta), 0.00005);
 
                 float shadow = 0.0;
                 float texel  = 1.0 / 2048.0;
