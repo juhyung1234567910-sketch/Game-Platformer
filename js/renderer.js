@@ -18,7 +18,6 @@ export class Renderer {
     initShaders() {
         const gl = this.gl;
 
-        // ── Shadow Pass ──────────────────────────────────────────
         const vsShadow = `
             attribute vec4 aPos;
             uniform mat4 uLightMVP, uModel;
@@ -34,7 +33,6 @@ export class Renderer {
             }
         `;
 
-        // ── Main Pass ─────────────────────────────────────────────
         const vsMain = `
             attribute vec4 aPos;
             attribute vec3 aNormal;
@@ -68,17 +66,12 @@ export class Renderer {
                     proj.y < 0.0 || proj.y > 1.0 ||
                     proj.z > 1.0) return 1.0;
 
-                // ✅ 핵심 수정:
-                // 바닥처럼 법선이 광원을 정면으로 향할수록(cosTheta→1)
-                // bias를 크게 줘야 self-shadowing(acne)을 막을 수 있음.
-                // 기존 코드는 반대로 cosTheta 높을수록 bias를 작게 줬음.
                 float cosTheta = clamp(dot(n, ld), 0.0, 1.0);
                 float bias = mix(0.001, 0.012, cosTheta);
 
                 float shadow = 0.0;
                 float texel  = 1.0 / 2048.0;
 
-                // PCF 5x5
                 for (float x = -2.0; x <= 2.0; x += 1.0) {
                     for (float y = -2.0; y <= 2.0; y += 1.0) {
                         float storedDepth = unpack(
@@ -176,11 +169,15 @@ export class Renderer {
     }
 
     // ── 행렬 수학 ──────────────────────────────────────────────────
+    // ✅ 핵심 수정: column-major 행렬 곱 올바른 구현
+    // 기존 코드는 row/column이 뒤바뀐 잘못된 곱으로 lightMVP가 완전히 틀렸음
+    // → 바닥 depth가 -24 같은 말도 안 되는 값으로 계산되어 그림자 불가
     mulMat(a, b) {
         const r = new Float32Array(16);
-        for (let i = 0; i < 4; i++)
-            for (let j = 0; j < 4; j++)
-                r[i*4+j] = a[i*4]*b[j]+a[i*4+1]*b[4+j]+a[i*4+2]*b[8+j]+a[i*4+3]*b[12+j];
+        for (let col = 0; col < 4; col++)
+            for (let row = 0; row < 4; row++)
+                for (let k = 0; k < 4; k++)
+                    r[col*4+row] += a[k*4+row] * b[col*4+k];
         return r;
     }
     ortho(l,r,b,t,n,f) {
@@ -214,9 +211,7 @@ export class Renderer {
         const lightMVP  = this.mulMat(lightProj, lightView);
 
         // ── Pass 1: Shadow Map ─────────────────────────────────────
-        // ✅ 바닥은 shadow map에서 제외: 바닥이 자기 깊이를 쓰면
-        //    자기 자신과 비교해서 항상 self-shadow(acne) 발생.
-        //    바닥은 receiver만 되고 caster는 박스/캐릭터만.
+        // 바닥은 제외 (self-shadow 방지), 박스·캐릭터만 caster
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
         gl.viewport(0, 0, this.shadowSize, this.shadowSize);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -232,12 +227,10 @@ export class Renderer {
 
         const uModelS = gl.getUniformLocation(this.shadowProg, "uModel");
 
-        // 맵 박스만 shadow caster (바닥 제외)
         for (const box of mapData) {
             gl.uniformMatrix4fv(uModelS, false, this._scaleM(...box.pos, ...box.scale));
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
         }
-        // 원격 플레이어 shadow caster
         if (remotePlayers) {
             for (const id in remotePlayers) {
                 const p = remotePlayers[id];
@@ -278,7 +271,7 @@ export class Renderer {
         const uModelM = gl.getUniformLocation(this.mainProg, "uModel");
         const uColorM = gl.getUniformLocation(this.mainProg, "uColor");
 
-        // 바닥 (shadow receiver만, caster 아님)
+        // 바닥
         gl.uniform4fv(uColorM, [0.28, 0.50, 0.24, 1.0]);
         gl.uniformMatrix4fv(uModelM, false, this._scaleM(0,-0.01,0, 60,0.01,60));
         gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
