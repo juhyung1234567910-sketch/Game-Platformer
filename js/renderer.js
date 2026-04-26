@@ -220,7 +220,7 @@ export class Renderer {
         gl.useProgram(this.shadowProg);
         
         // ✅ 수정: Shadow Acne 방지를 위해 앞면(FRONT)을 Cull
-        gl.cullFace(gl.BACK);
+        gl.cullFace(gl.FRONT);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeBuf);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
@@ -253,7 +253,7 @@ export class Renderer {
         gl.useProgram(this.mainProg);
 
         // ✅ 수정: 메인 씬 렌더링 시에는 정상적으로 뒷면(BACK)을 Cull
-        gl.cullFace(gl.FRONT);
+        gl.cullFace(gl.BACK);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
