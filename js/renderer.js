@@ -66,16 +66,17 @@ export class Renderer {
                     proj.y < 0.0 || proj.y > 1.0 ||
                     proj.z > 1.0) return 1.0;
 
-                // bias: 광원과 법선 각도가 클수록(비스듬할수록) 크게
+                // 법선이 광원을 등질수록(비스듬한 면) bias 크게
+                // 법선이 광원을 정면으로 향할수록 bias 작게 (그림자 선명하게)
                 float cosTheta = clamp(dot(n, ld), 0.0, 1.0);
-                float bias = max(0.002 * (1.0 - cosTheta), 0.001);
+                float bias = mix(0.008, 0.001, cosTheta);
 
                 float shadow = 0.0;
                 float texel  = 1.0 / 2048.0;
 
-                for (int x = -2; x <= 2; x++) {
-                    for (int y = -2; y <= 2; y++) {
-                        vec2 offset = vec2(float(x), float(y)) * texel;
+                for (int xi = -2; xi <= 2; xi++) {
+                    for (int yi = -2; yi <= 2; yi++) {
+                        vec2 offset = vec2(float(xi), float(yi)) * texel;
                         float storedDepth = unpack(texture2D(uShadowMap, proj.xy + offset));
                         shadow += (proj.z - bias > storedDepth) ? 0.30 : 1.0;
                     }
@@ -128,7 +129,7 @@ export class Renderer {
         gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
             this.shadowSize, this.shadowSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        // NEAREST: packed depth값이 보간되면 unpack 결과가 깨짐
+        // NEAREST: packed RGBA depth를 LINEAR로 보간하면 unpack 값이 깨짐
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -170,7 +171,6 @@ export class Renderer {
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
     }
 
-    // ── 행렬 수학 ──────────────────────────────────────────────────
     mulMat(a, b) {
         const r = new Float32Array(16);
         for (let col = 0; col < 4; col++)
@@ -198,7 +198,6 @@ export class Renderer {
     cross(a,b) { return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]; }
     dot(a,b)   { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
 
-    // ── 메인 렌더 ──────────────────────────────────────────────────
     drawWorld(player, cam, remotePlayers, mapData) {
         const gl = this.gl;
         if (!mapData) return;
@@ -215,11 +214,9 @@ export class Renderer {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.shadowProg);
 
-        // ✅ shadow pass: FRONT face cull → 뒷면만 depth 기록
-        //    → Peter Panning(그림자가 물체에서 떨어지는 현상) 방지
-        //    바닥은 thin mesh라 FRONT cull 시 아무것도 안 그려지므로
-        //    shadow caster에서 제외해도 됨 (self-shadow 없음)
-        gl.cullFace(gl.FRONT);
+        // shadow pass: BACK face cull (일반), FRONT cull 없음
+        // Peter Panning은 bias로 해결, FRONT cull은 큐브 위 오그림자 유발
+        gl.cullFace(gl.BACK);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeBuf);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
@@ -231,7 +228,13 @@ export class Renderer {
 
         const uModelS = gl.getUniformLocation(this.shadowProg, "uModel");
 
-        // 박스만 caster (바닥 제외 - self-shadow 방지)
+        // ✅ 바닥도 shadow map에 포함
+        // 바닥이 없으면 광원시점에서 바닥 픽셀에 depth 기록이 없어
+        // 큐브의 shadow coord가 그 위치를 조회할 때 엉뚱한 값(0 또는 1)을 읽음
+        // → 바닥의 self-shadow(acne)는 bias로 충분히 억제 가능
+        gl.uniformMatrix4fv(uModelS, false, this._scaleM(0,-0.01,0, 60,0.01,60));
+        gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+
         for (const box of mapData) {
             gl.uniformMatrix4fv(uModelS, false, this._scaleM(...box.pos, ...box.scale));
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
@@ -252,7 +255,6 @@ export class Renderer {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(this.mainProg);
 
-        // ✅ 메인 패스는 반드시 BACK으로 복구
         gl.cullFace(gl.BACK);
 
         gl.activeTexture(gl.TEXTURE0);
@@ -279,12 +281,10 @@ export class Renderer {
         const uModelM = gl.getUniformLocation(this.mainProg, "uModel");
         const uColorM = gl.getUniformLocation(this.mainProg, "uColor");
 
-        // 바닥
         gl.uniform4fv(uColorM, [0.28, 0.50, 0.24, 1.0]);
         gl.uniformMatrix4fv(uModelM, false, this._scaleM(0,-0.01,0, 60,0.01,60));
         gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
 
-        // 맵 박스
         for (const box of mapData) {
             let color = [0.70,0.68,0.62,1.0];
             if (box.tag === 'wall')     color = [0.60,0.55,0.48,1.0];
@@ -295,7 +295,6 @@ export class Renderer {
             gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
         }
 
-        // 원격 플레이어
         if (remotePlayers) {
             for (const id in remotePlayers) {
                 const p = remotePlayers[id];
