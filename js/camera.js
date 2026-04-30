@@ -1,115 +1,101 @@
-export class Camera {
-    constructor() {
-        this.distance      = 0.0;
-        this.maxDistance   = 10.0;
-        this.isFirstPerson = true;
-        this.slideDropCamera = 0.0;
+// camera.js - 1인칭/3인칭 카메라 로직 (Python 코드 직역)
 
-        this.fov  = 75.0;
-        this.near = 0.1;
-        this.far  = 1000.0;
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+
+export class CameraController {
+  constructor(threeCamera) {
+    this.camera = threeCamera;
+
+    this.yaw   = -90.0;   // Python 초기값
+    this.pitch = 0.0;
+    this.cameraDistance = 4.0;
+    this.minDist = 0.0;
+    this.maxDist = 8.0;
+    this.isFirstPerson = false;
+
+    // 무기 흔들림 (bob, sway, roll)
+    this.moveTime  = 0;
+    this.bobAmp    = 0;
+    this.currentRoll = 0;
+    this.targetRoll  = 0;
+    this.recoilRoll  = 0;
+    this.swayX = 0; this.swayY = 0;
+    this.targetSwayX = 0; this.targetSwayY = 0;
+
+    this.slideDrop = 0;
+
+    // 임시 벡터 (GC 절약)
+    this._front = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._headPos = new THREE.Vector3();
+    this._camPos  = new THREE.Vector3();
+    this._target  = new THREE.Vector3();
+  }
+
+  // 마우스 이동 처리
+  onMouseMove(dx, dy, isAiming) {
+    const sens = 0.08 * (isAiming ? 0.5 : 1.0);
+    this.yaw   += dx * sens;
+    this.pitch -= dy * sens;
+    this.pitch  = Math.max(-89, Math.min(89, this.pitch));
+    this.targetSwayX = dx * 0.0005;
+    this.targetSwayY = dy * 0.0005;
+  }
+
+  // 마우스 휠 - 줌
+  onWheel(delta) {
+    this.cameraDistance = Math.max(this.minDist, Math.min(this.maxDist, this.cameraDistance - delta * 0.5));
+    this.isFirstPerson = this.cameraDistance <= 0.5;
+  }
+
+  // 매 프레임 호출 - 카메라 위치 및 뷰 매트릭스 계산
+  update(playerPos, isSliding, bobAmp, moveTime, isJumping, currentRoll) {
+    const yawRad   = THREE.MathUtils.degToRad(this.yaw);
+    const pitchRad = THREE.MathUtils.degToRad(this.pitch);
+
+    // 전방 벡터
+    this._front.set(
+      Math.cos(yawRad) * Math.cos(pitchRad),
+      Math.sin(pitchRad),
+      Math.sin(yawRad) * Math.cos(pitchRad)
+    );
+    this._right.set(-Math.sin(yawRad), 0, Math.cos(yawRad));
+
+    const HEAD_HEIGHT = 1.7;
+    this.slideDrop += (( isSliding ? -0.6 : 0) - this.slideDrop) * 0.2;
+
+    this._headPos.copy(playerPos).y += HEAD_HEIGHT + this.slideDrop;
+
+    // 뷰 밥 (걷기 흔들림)
+    if (!isJumping && !isSliding) {
+      const viewBob = Math.sin(moveTime * 7) * 0.06 * bobAmp;
+      this._headPos.y += viewBob;
     }
 
-    updateAndGetMatrices(player, canvasWidth, canvasHeight) {
-        const headHeight = 1.7;
+    const dist = this.cameraDistance;
 
-        // 슬라이딩 시 카메라 높이 부드럽게 낮추기
-        // player.isSliding 은 Player.js 에 항상 존재 (false 기본값)
-        const targetDrop = player.isSliding ? -0.6 : 0.0;
-        this.slideDropCamera += (targetDrop - this.slideDropCamera) * 0.2;
-
-        // 머리 위치
-        let headPos = [...player.pos];
-        headPos[1] += headHeight + this.slideDropCamera;
-
-        // 카메라 bobbing
-        // player.moveTime, player.bobAmp, player.isGrounded 는
-        // Player.js 에 모두 선언돼 있으므로 undefined 없음
-        const viewBobOffset = Math.sin(player.moveTime * 7.0) * 0.06 * player.bobAmp;
-        if (player.isGrounded && !player.isSliding) {
-            headPos[1] += viewBobOffset;
-        }
-
-        // 시선 벡터 계산
-        const radYaw   = player.yaw   * (Math.PI / 180);
-        const radPitch = player.pitch * (Math.PI / 180);
-
-        const front = [
-            Math.cos(radYaw) * Math.cos(radPitch),
-            Math.sin(radPitch),
-            Math.sin(radYaw) * Math.cos(radPitch)
-        ];
-        const right = [-Math.sin(radYaw), 0.0, Math.cos(radYaw)];
-        const up    = [0.0, 1.0, 0.0];
-
-        // 1인칭 / 3인칭 카메라 위치
-        let cameraPos = [...headPos];
-        let targetPos = [
-            headPos[0] + front[0],
-            headPos[1] + front[1],
-            headPos[2] + front[2]
-        ];
-
-        if (!this.isFirstPerson) {
-            const t = Math.max(0.0, Math.min(1.0, (this.distance - 0.5) / 2.0));
-            cameraPos = [
-                headPos[0] - front[0] * this.distance - right[0] * 0.8 * t,
-                headPos[1] - front[1] * this.distance - right[1] * 0.8 * t + 0.3 * t,
-                headPos[2] - front[2] * this.distance - right[2] * 0.8 * t
-            ];
-            targetPos = [
-                headPos[0] + front[0] * 100.0,
-                headPos[1] + front[1] * 100.0,
-                headPos[2] + front[2] * 100.0
-            ];
-        }
-
-        const aspect         = canvasWidth / canvasHeight;
-        const viewMatrix     = this.createLookAt(cameraPos, targetPos, up);
-        const projectionMatrix = this.createPerspective(this.fov, aspect, this.near, this.far);
-
-        return { front, right, cameraPos, viewMatrix, projectionMatrix };
+    if (this.isFirstPerson) {
+      this._camPos.copy(this._headPos);
+      this._target.copy(this._headPos).addScaledVector(this._front, 1);
+    } else {
+      const offsetFactor = Math.max(0, Math.min(1, (dist - 0.5) / 2.0));
+      this._camPos.copy(this._headPos)
+        .addScaledVector(this._front, -dist)
+        .addScaledVector(this._right, -0.8 * offsetFactor)
+        .y += 0.3 * offsetFactor;
+      this._target.copy(this._headPos).addScaledVector(this._front, 100);
     }
 
-    // ── 벡터 수학 ──────────────────────────────────────────────────
-    subtractVectors(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+    // 카메라 적용
+    this.camera.position.copy(this._camPos);
+    this.camera.lookAt(this._target);
 
-    normalize(v) {
-        const l = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
-        return l > 0.00001 ? [v[0]/l, v[1]/l, v[2]/l] : [0, 0, 0];
-    }
+    // Roll (틸트)
+    this.camera.rotation.z = THREE.MathUtils.degToRad(currentRoll);
+  }
 
-    cross(a, b) {
-        return [
-            a[1]*b[2] - a[2]*b[1],
-            a[2]*b[0] - a[0]*b[2],
-            a[0]*b[1] - a[1]*b[0]
-        ];
-    }
-
-    createLookAt(eye, center, up) {
-        const z = this.normalize(this.subtractVectors(eye, center));
-        const x = this.normalize(this.cross(up, z));
-        const y = this.normalize(this.cross(z, x));
-        return new Float32Array([
-            x[0], y[0], z[0], 0,
-            x[1], y[1], z[1], 0,
-            x[2], y[2], z[2], 0,
-            -(x[0]*eye[0] + x[1]*eye[1] + x[2]*eye[2]),
-            -(y[0]*eye[0] + y[1]*eye[1] + y[2]*eye[2]),
-            -(z[0]*eye[0] + z[1]*eye[1] + z[2]*eye[2]),
-            1
-        ]);
-    }
-
-    createPerspective(fov, aspect, near, far) {
-        const f = Math.tan(Math.PI * 0.5 - 0.5 * (fov * Math.PI / 180));
-        const ri = 1.0 / (near - far);
-        return new Float32Array([
-            f / aspect, 0,  0,                        0,
-            0,          f,  0,                        0,
-            0,          0,  (near + far) * ri,       -1,
-            0,          0,  near * far * ri * 2,      0
-        ]);
-    }
+  // 전방벡터 반환 (이동, 사격에 사용)
+  getFront() { return this._front.clone(); }
+  getRight() { return this._right.clone(); }
+  getHeadPos() { return this._headPos.clone(); }
 }
