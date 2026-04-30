@@ -231,67 +231,52 @@ export class Renderer {
   }
 
   createOrUpdateRemotePlayer(pid, info, playerMeshMap) {
-  if (!playerMeshMap[pid]) {
-    const parts = this._buildPlayerGroup();
-    this.scene.add(parts.group);
-    playerMeshMap[pid] = parts;
+    if (!playerMeshMap[pid]) {
+      const parts = this._buildPlayerGroup();
+      this.scene.add(parts.group);
+      playerMeshMap[pid] = parts;
+    }
+
+    const parts = playerMeshMap[pid];
+    const { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot, gunGroup } = parts;
+
+    const px = info.pos?.[0] ?? 0;
+    const py = info.pos?.[1] ?? 0;
+    const pz = info.pos?.[2] ?? 0;
+    const yaw      = info.yaw       ?? 0;
+    const pitch    = info.pitch     ?? 0;
+    const moveTime = info.move_time ?? 0;
+    const bobAmp   = info.bob_amp   ?? 0;
+    const isSliding = !!info.is_sliding;
+    const isAiming  = !!info.is_aiming;
+    const recoil    = info.recoil   ?? 0;
+
+    const slideOffset = isSliding ? -0.6 : 0;
+    group.position.set(px, py + 0.4 + slideOffset, pz);
+    group.rotation.y = -THREE.MathUtils.degToRad(yaw) - Math.PI / 2;
+
+    // 머리 pitch (Python: extra_rot = RotX(pitch), pivot_y=-0.25)
+    headPivot.rotation.x = THREE.MathUtils.degToRad(-pitch);
+
+    // 다리 스윙 (Python: swing = sin(move_time*6)*20deg*bob_amp)
+    const swing = isSliding ? 0 : Math.sin(moveTime * 6) * (20 * Math.PI/180) * bobAmp;
+    legLPivot.rotation.x = isSliding ? (70*Math.PI/180) :  swing;
+    legRPivot.rotation.x = isSliding ?-(70*Math.PI/180) : -swing;
+
+    // 팔 (Python draw_asymmetric_arm)
+    const ads = isAiming ? 1 : 0;
+    // 오른팔 (side=1): z_rot=(-20+10*ads), x_rot=(65-15*ads)
+    armRPivot.rotation.x = THREE.MathUtils.degToRad(65 - ads*15);
+    armRPivot.rotation.z = THREE.MathUtils.degToRad(-20 + ads*10);
+    // 왼팔 (side=-1): z_rot=(40-20*ads), x_rot=(45+10*ads)
+    armLPivot.rotation.x = THREE.MathUtils.degToRad(45 + ads*10);
+    armLPivot.rotation.z = THREE.MathUtils.degToRad( 40 - ads*20);
+
+    // 총 반동
+    gunGroup.rotation.x = recoil * -0.3;
+
+    return parts.group;
   }
-
-  const parts = playerMeshMap[pid];
-  const { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot, gunGroup } = parts;
-
-  const px = info.pos?.[0] ?? 0;
-  const py = info.pos?.[1] ?? 0;
-  const pz = info.pos?.[2] ?? 0;
-  const yaw       = info.yaw       ?? 0;
-  const pitch     = info.pitch     ?? 0;
-  const moveTime  = info.move_time ?? 0;
-  const bobAmp    = info.bob_amp   ?? 0;
-  const isSliding = !!info.is_sliding;
-  const isAiming  = !!info.is_aiming;
-  const recoil    = info.recoil    ?? 0;
-
-  // ── 1. 몸 위치: player.pos.y는 발 기준이므로 그대로 사용
-  const slideOffset = isSliding ? -0.5 : 0;
-  group.position.set(px, py + slideOffset, pz);
-
-  // ── 2. 몸 회전: yaw를 그대로 반영 (오프셋 제거)
-  //    Python 좌표계(Z-forward)→Three.js(Z-backward) 보정만 적용
-  group.rotation.y = THREE.MathUtils.degToRad(-yaw);
-
-  // ── 3. 머리: pitch 반영 (위를 보면 고개 위로)
-  headPivot.rotation.x = THREE.MathUtils.degToRad(-pitch);
-
-  // ── 4. 다리 스윙
-  const swing = isSliding
-    ? 0
-    : Math.sin(moveTime * 6) * (20 * Math.PI / 180) * bobAmp;
-
-  if (isSliding) {
-    legLPivot.rotation.x =  (70 * Math.PI / 180);
-    legRPivot.rotation.x = -(70 * Math.PI / 180);
-  } else {
-    legLPivot.rotation.x =  swing;
-    legRPivot.rotation.x = -swing;
-  }
-
-  // ── 5. 팔 + 총: pitch를 팔과 총 그룹에도 반영
-  const ads      = isAiming ? 1 : 0;
-  const pitchRad = THREE.MathUtils.degToRad(pitch);
-
-  // 오른팔: 앞으로 들고, pitch만큼 위/아래
-  armRPivot.rotation.x = THREE.MathUtils.degToRad(65 - ads * 15) - pitchRad * 0.6;
-  armRPivot.rotation.z = THREE.MathUtils.degToRad(-20 + ads * 10);
-
-  // 왼팔: pitch 동일하게 연동
-  armLPivot.rotation.x = THREE.MathUtils.degToRad(45 + ads * 10) - pitchRad * 0.5;
-  armLPivot.rotation.z = THREE.MathUtils.degToRad( 40 - ads * 20);
-
-  // 총: pitch + recoil 반영
-  gunGroup.rotation.x = THREE.MathUtils.degToRad(-pitch) + recoil * -0.3;
-
-  return parts.group;
-}
 
   removeRemotePlayer(pid, playerMeshMap) {
     if (playerMeshMap[pid]) {
