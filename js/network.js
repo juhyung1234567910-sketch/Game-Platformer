@@ -1,7 +1,7 @@
-// network.js - Firebase Realtime Database 멀티플레이어
+// network.js - Firebase Realtime Database 멀티플레이어 (닉네임/픽셀/KD 포함)
 
-import { initializeApp }    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, set, onValue, remove, onDisconnect }
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 const FIREBASE_CONFIG = {
@@ -15,32 +15,39 @@ const FIREBASE_CONFIG = {
   measurementId:     "G-VDQ9ESN8L5"
 };
 
+const fireApp = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+
 export class Network {
-  constructor() {
-    this.app = initializeApp(FIREBASE_CONFIG);
-    this.db  = getDatabase(this.app);
-    this.myId = 'player_' + Math.random().toString(36).slice(2, 9);
+  constructor(userInfo) {
+    this.db       = getDatabase(fireApp);
+    this.myId     = userInfo.nickname;          // 닉네임을 ID로 사용
+    this.nickname = userInfo.nickname;
+    this.pixels   = userInfo.pixels;
 
     this.otherPlayers = {};
     this.myHealth     = 100;
 
-    // 리스폰 무적 시간 관리
-    // 이 시각 이전에 날아온 hit는 무시
-    this._respawnTime = Date.now();
-    // 리스폰 후 무적 시간 (ms) - 3초
+    // 킬뎃
+    this.kills  = userInfo.kills  || 0;
+    this.deaths = userInfo.deaths || 0;
+
+    // 리스폰 무적
+    this._respawnTime        = Date.now();
     this._invincibleDuration = 3000;
 
     this.onPlayersUpdate = null;
     this.onHealthUpdate  = null;
     this.onHit           = null;
+    this.onKill          = null;   // 킬 발생 시 콜백
 
     this._lastSend    = 0;
-    this._sendInterval = 50; // 20hz
+    this._sendInterval = 50;
 
     this._setupListeners();
   }
 
   _setupListeners() {
+    // 전체 플레이어 구독
     onValue(ref(this.db, 'players'), snapshot => {
       const data = snapshot.val() || {};
       const others = {};
@@ -53,26 +60,14 @@ export class Network {
       if (this.onPlayersUpdate) this.onPlayersUpdate(others);
     });
 
+    // 피격 이벤트
     const hitRef = ref(this.db, `hits/${this.myId}`);
     onValue(hitRef, snapshot => {
       const data = snapshot.val();
       if (!data) return;
-
-      // ── 핵심 수정 1: 리스폰 이전에 날아온 hit 무시 ──
       const hitTs = data.ts || 0;
-      if (hitTs < this._respawnTime) {
-        console.log('[🛡️] 리스폰 이전 hit 무시 (old ts)');
-        remove(hitRef);
-        return;
-      }
-
-      // ── 핵심 수정 2: 무적 시간 중 hit 무시 ──
-      const now = Date.now();
-      if (now - this._respawnTime < this._invincibleDuration) {
-        console.log('[🛡️] 무적 시간 중 hit 무시');
-        remove(hitRef);
-        return;
-      }
+      if (hitTs < this._respawnTime) { remove(hitRef); return; }
+      if (Date.now() - this._respawnTime < this._invincibleDuration) { remove(hitRef); return; }
 
       this.myHealth = Math.max(0, this.myHealth - (data.damage || 15));
       if (this.onHealthUpdate) this.onHealthUpdate(this.myHealth);
@@ -87,7 +82,14 @@ export class Network {
     const now = Date.now();
     if (now - this._lastSend < this._sendInterval) return;
     this._lastSend = now;
-    set(ref(this.db, `players/${this.myId}`), { ...snapshot, ts: now }).catch(() => {});
+    set(ref(this.db, `players/${this.myId}`), {
+      ...snapshot,
+      nickname: this.nickname,
+      pixels:   this.pixels,
+      kills:    this.kills,
+      deaths:   this.deaths,
+      ts:       now,
+    }).catch(() => {});
   }
 
   sendHit(targetId, damage = 15) {
@@ -98,26 +100,28 @@ export class Network {
     }).catch(() => {});
   }
 
-  // ── 핵심 수정 3: 리스폰 시 HP 리셋 + 타임스탬프 갱신 + hits 노드 삭제 ──
+  // 킬 확인: 타겟 HP가 0이 되면 킬 카운트 증가
+  async confirmKill(targetId) {
+    this.kills++;
+    // DB에 킬 저장
+    set(ref(this.db, `users/${this.myId}/kills`), this.kills).catch(()=>{});
+    if (this.onKill) this.onKill(targetId, this.kills, this.deaths);
+  }
+
   sendRespawn(posArr) {
     const now = Date.now();
-
-    // 내 HP 즉시 리셋
     this.myHealth     = 100;
-    // 리스폰 시각 갱신 → 이 시각 이전 hit는 모두 무시됨
     this._respawnTime = now;
-
-    // Firebase에 남아있는 내 hit 데이터 즉시 삭제
+    this.deaths++;
+    set(ref(this.db, `users/${this.myId}/deaths`), this.deaths).catch(()=>{});
     remove(ref(this.db, `hits/${this.myId}`)).catch(() => {});
-
-    // 플레이어 위치 갱신
     set(ref(this.db, `players/${this.myId}`), {
       pos:          posArr,
+      nickname:     this.nickname,
+      pixels:       this.pixels,
       health_reset: true,
       ts:           now
     }).catch(() => {});
-
-    console.log('[🔄] 리스폰 완료 - HP 100, 무적 3초');
   }
 
   disconnect() {
