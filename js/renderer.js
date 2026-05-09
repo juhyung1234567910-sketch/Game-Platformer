@@ -106,9 +106,8 @@ export class Renderer {
     const T = { checker:this.texChecker, stripe:this.texStripe, noise:this.texNoise, solid:this.texSolid };
 
     const boxes = [
-      // === 기존 맵 데이터 ===
-      [0,-30,80,   400,1,400,  0x0d0d15,'checker'],
-      [0,0,0,      15,1,15,    0xccccda,'checker'],
+      [0,-30,80,   400,1,400,   0x0d0d15,'checker'],
+      [0,0,0,      15,1,15,     0xccccda,'checker'],
       [-14,1.5,-14,0.5,1,0.5,  0xb39933,'stripe'],
       [14,1.5,-14, 0.5,1,0.5,  0xb39933,'stripe'],
       [-14,1.5,14, 0.5,1,0.5,  0xb39933,'stripe'],
@@ -153,46 +152,7 @@ export class Renderer {
       [0,32,152,   32,1,4,     0xccccdd,'solid'],
       [0,25,152,   3,4,3,      0x9933dd,'noise'],
       [0,29,152,   1.5,1.5,1.5,0xe6ccff,'noise'],
-
-      // === 수정된 확장 맵 구역 (겹침 현상 해결) ===
-
-      // 1. 거대 구역으로 이어지는 징검다리 구간 (기존 맵 끝에서 부드럽게 이어짐)
-      [0, 24, 173,   4, 0.5, 4,    0x7fa0b3, 'solid'],
-      [0, 25, 180,   3, 0.5, 3,    0x7fa0b3, 'solid'],
-      [0, 26, 187,   3, 0.5, 3,    0x7fa0b3, 'solid'],
-      [0, 27, 194,   3, 0.5, 3,    0x7fa0b3, 'solid'],
-
-      // 2. 중간 아레나 구역 (징검다리를 덮지 않도록 Z축을 225로 뒤로 완전히 뺌)
-      [0, 28, 220,   35, 0.5,  35,    0x4d6659, 'checker'], // 중앙 아레나 바닥
-      [-15, 32, 225, 2, 8, 2,      0x88aa99, 'stripe'],  // 아레나 왼쪽 기둥
-      [15, 32, 225,  2, 8, 2,      0x88aa99, 'stripe'],  // 아레나 오른쪽 기둥
-      [0, 32, 210,   2, 8, 2,      0x88aa99, 'stripe'],  // 아레나 입구 기둥
-      [0, 30, 225,   6, 3, 6,      0x33e699, 'noise'],   // 아레나 중앙 조형물
-      [0, 34, 225,   2, 2, 2,      0xffffff, 'noise'],   // 중앙 조형물 장식
-
-      // 3. 지그재그 고공 등반 구간 (아레나 끝에서부터 다시 시작)
-      [10, 30, 252,  4, 0.2, 4,    0xe6e61a, 'solid'],
-      [20, 31, 262,  4, 0.2, 4,    0xe6e61a, 'solid'],
-      [10, 32, 272,  4, 0.2, 4,    0xe6e61a, 'solid'],
-      [0, 33, 282,   4, 0.2, 4,    0xe6e61a, 'solid'],
-      [-10, 34, 292, 4, 0.2, 4,    0xe6e61a, 'solid'],
-      [-20, 35, 302, 4, 0.2, 4,    0xe6e61a, 'solid'],
-      [-10, 36, 312, 4, 0.2, 4,    0xe6e61a, 'solid'],
-      [0, 37, 322,   4, 0.2, 4,    0xe6e61a, 'solid'], // 보스룸 진입용 마지막 징검다리
-
-      // 4. 최종 보스 룸 / 거대 신전 구역 (징검다리를 덮지 않도록 Z축을 350으로 멀리 배치)
-      [0, 37.5, 350, 50, 1, 50,    0x1a1a24, 'checker'], // 거대 흑요석 바닥
-      [-22, 49, 330, 4, 25, 4,     0xcc3333, 'stripe'],  // 신전 기둥 (좌전방)
-      [22, 49, 330,  4, 25, 4,     0xcc3333, 'stripe'],  // 신전 기둥 (우전방)
-      [-22, 49, 370, 4, 25, 4,     0xcc3333, 'stripe'],  // 신전 기둥 (좌후방)
-      [22, 49, 370,  4, 25, 4,     0xcc3333, 'stripe'],  // 신전 기둥 (우후방)
-      
-      // 신전 중앙 제단 및 코어
-      [0, 39, 350,   15, 2, 15,    0x333344, 'solid'],   // 제단 1단
-      [0, 41, 350,   10, 2, 10,    0x444455, 'solid'],   // 제단 2단
-      [0, 45, 350,   4, 8, 4,      0xffaa00, 'noise'],   // 코어 조형물
-      [0, 50, 350,   8, 1, 8,      0xffcc00, 'solid']    // 코어 황금 지붕
-];
+    ];
 
     boxes.forEach(([x,y,z, sx,sy,sz, hex, tk]) => {
       const geo  = new THREE.BoxGeometry(sx*2, sy*2, sz*2);
@@ -273,7 +233,71 @@ export class Renderer {
     }
     group.add(gunGroup);
 
-    return { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot, gunGroup };
+    // 이름표 (나중에 nickname 확정 후 추가)
+    return { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot, gunGroup, nameplate: null };
+  }
+
+  // ── 픽셀 배열 → THREE.Texture ──
+  _pixelsToTexture(pixels) {
+    if (!pixels || !Array.isArray(pixels)) return this.texPlayer;
+    const size = 16;
+    const data = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const col = pixels[y]?.[x];
+        const i = (y * size + x) * 4;
+        if (col && col !== 'null') {
+          const r = parseInt(col.slice(1,3),16);
+          const g = parseInt(col.slice(3,5),16);
+          const b = parseInt(col.slice(5,7),16);
+          data[i]=r; data[i+1]=g; data[i+2]=b; data[i+3]=255;
+        } else {
+          data[i]=data[i+1]=data[i+2]=data[i+3]=0; // 투명
+        }
+      }
+    }
+    const tex = new THREE.DataTexture(data, size, size);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter  = THREE.NearestFilter;
+    tex.minFilter  = THREE.NearestFilter;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  // ── 이름표 스프라이트 생성 ──
+  _makeNameplate(nickname) {
+    const canvas = document.createElement('canvas');
+    canvas.width  = 256;
+    canvas.height = 48;
+    const ctx = canvas.getContext('2d');
+
+    // 배경
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.roundRect(0, 0, 256, 48, 8);
+    ctx.fill();
+
+    // 테두리
+    ctx.strokeStyle = 'rgba(0,255,224,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.roundRect(1, 1, 254, 46, 8);
+    ctx.stroke();
+
+    // 텍스트
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px "Share Tech Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(nickname, 128, 24);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+
+    const mat      = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+    const sprite   = new THREE.Sprite(mat);
+    sprite.scale.set(1.6, 0.3, 1);
+    sprite.position.y = 2.5; // 머리 위
+    sprite.renderOrder = 999;
+    return sprite;
   }
 
   createOrUpdateRemotePlayer(pid, info, playerMeshMap) {
@@ -325,6 +349,15 @@ export class Renderer {
 
     // 총 반동
     gunGroup.rotation.x = recoil * -0.3;
+
+    // 이름표 생성/갱신
+    const nickname = info.nickname || pid.slice(-6);
+    if (!parts.nameplate || parts._lastNick !== nickname) {
+      if (parts.nameplate) group.remove(parts.nameplate);
+      parts.nameplate  = this._makeNameplate(nickname);
+      parts._lastNick  = nickname;
+      group.add(parts.nameplate);
+    }
 
     return parts.group;
   }
