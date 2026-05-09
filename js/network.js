@@ -5,13 +5,14 @@ import { getDatabase, ref, set, onValue, remove, onDisconnect }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 const FIREBASE_CONFIG = {
-  apiKey:            "AIzaSyAS4bTPT7sNfVs_EblSJEOYlbwXWMd9iPc",
-  authDomain:        "multiplatformer-1acb3.firebaseapp.com",
-  databaseURL:       "https://multiplatformer-1acb3-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "multiplatformer-1acb3",
-  storageBucket:     "multiplatformer-1acb3.firebasestorage.app",
-  messagingSenderId: "271218714227",
-  appId:             "1:271218714227:web:f20fbfd74cb303c7b76c06"
+  apiKey:            "AIzaSyCHXYjHr67AHEj6cfUUn5jxGfKa3c5adYE",
+  authDomain:        "multiplatformer-6db0f.firebaseapp.com",
+  databaseURL:       "https://multiplatformer-6db0f-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:         "multiplatformer-6db0f",
+  storageBucket:     "multiplatformer-6db0f.firebasestorage.app",
+  messagingSenderId: "74962223394",
+  appId:             "1:74962223394:web:e4ab2a77d480a19474e57b",
+  measurementId:     "G-VDQ9ESN8L5"
 };
 
 export class Network {
