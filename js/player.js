@@ -21,7 +21,7 @@ export class Player {
     this.slideSpeed      = 0;
     this.slideDir        = new THREE.Vector3();
     this.dashCooldown    = 0;
-    this.dashCooldownMax = 90;
+    this.dashCooldownMax = 10;
 
     // 애니메이션
     this.moveTime    = 0;
@@ -366,6 +366,7 @@ export class Player {
 
     // 점프
     if (keys['Space'] && !this.isJumping) {
+      this.isSliding  = false;
       this.yVel = this.jumpStr;
       this.isJumping = true;
     }
