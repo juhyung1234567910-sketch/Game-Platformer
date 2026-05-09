@@ -1,6 +1,7 @@
 // renderer.js - Three.js 씬, 조명, 맵, 원격 플레이어 풀바디
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+import { OBJLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/OBJLoader.js';
 
 export class Renderer {
   constructor(canvas) {
@@ -39,6 +40,12 @@ export class Renderer {
     this._setupLights();
     this._buildWorld();
     this.particles = [];
+
+    // 공유 OBJ 총 (원격 플레이어용)
+    this._sharedGunObj    = null;
+    this._sharedGunScale  = 1;
+    this._sharedGunCenter = new THREE.Vector3();
+    this._loadSharedGun();
 
     window.addEventListener('resize', () => this._onResize());
   }
@@ -216,15 +223,14 @@ export class Renderer {
     armLPivot.add(armLMesh);
     group.add(armLPivot);
 
-    // 총 (원본 gun_z=1.2 위치에 배치)
+    // 총 그룹 (OBJ 로드 완료 시 자동으로 메시 추가됨)
     const gunGroup = new THREE.Group();
     gunGroup.position.set(0.35, 1.22, 1.2);
-    const gunMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.1, 0.55),
-      gMat()
-    );
-    gunMesh.castShadow = true;
-    gunGroup.add(gunMesh);
+    // OBJ가 이미 로드된 경우 즉시 클론, 아니면 나중에 createOrUpdateRemotePlayer에서 채움
+    if (this._sharedGunObj) {
+      const g = this._cloneGunForPlayer();
+      gunGroup.add(g);
+    }
     group.add(gunGroup);
 
     return { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot, gunGroup };
@@ -271,6 +277,11 @@ export class Renderer {
     // 왼팔 (side=-1): z_rot=(40-20*ads), x_rot=(45+10*ads)
     armLPivot.rotation.x = THREE.MathUtils.degToRad(45 + ads*10);
     armLPivot.rotation.z = THREE.MathUtils.degToRad( 40 - ads*20);
+
+    // OBJ 로드 완료됐는데 아직 총이 없으면 추가
+    if (this._sharedGunObj && gunGroup.children.length === 0) {
+      gunGroup.add(this._cloneGunForPlayer());
+    }
 
     // 총 반동
     gunGroup.rotation.x = recoil * -0.3;
@@ -321,6 +332,41 @@ export class Renderer {
     this.camera.aspect = this.width/this.height; this.camera.updateProjectionMatrix();
     this.weaponCamera.aspect = this.width/this.height; this.weaponCamera.updateProjectionMatrix();
     this.renderer.setSize(this.width, this.height);
+  }
+
+  // ── OBJ 총 공유 로드 ──
+  _loadSharedGun() {
+    const loader = new OBJLoader();
+    const gunMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a, map: this.texWeapon });
+
+    loader.load(
+      '../m4a1.obj',
+      (obj) => {
+        obj.traverse(child => {
+          if (child.isMesh) { child.material = gunMat.clone(); child.castShadow = true; }
+        });
+        // 크기 정규화
+        const box3 = new THREE.Box3().setFromObject(obj);
+        const size = new THREE.Vector3(); box3.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+        this._sharedGunScale = 0.35 / maxDim;
+        box3.getCenter(this._sharedGunCenter);
+        this._sharedGunObj = obj;
+        console.log('[✅] renderer: m4a1.obj 공유 로드 완료');
+      },
+      null,
+      (err) => console.warn('[⚠️] renderer: m4a1.obj 로드 실패', err)
+    );
+  }
+
+  _cloneGunForPlayer() {
+    const g = this._sharedGunObj.clone(true);
+    const s = this._sharedGunScale;
+    const c = this._sharedGunCenter;
+    g.scale.setScalar(s);
+    g.position.set(-c.x*s, -c.y*s, -c.z*s);
+    g.rotation.set(0, Math.PI, 0);
+    return g;
   }
 
   getBoxes()     { return this.boxMeshes; }
