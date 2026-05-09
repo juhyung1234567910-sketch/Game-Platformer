@@ -168,73 +168,79 @@ export class Renderer {
   // ── 원격 플레이어 풀바디 (Python draw_player_full 직역) ──
   _buildPlayerGroup() {
     const group = new THREE.Group();
-    const pMat  = (col) => new THREE.MeshLambertMaterial({ color: col, map: this.texPlayer });
-    const gMat  = ()    => new THREE.MeshLambertMaterial({ color: 0x222222, map: this.texWeapon });
-
-    const box = (sx,sy,sz) => new THREE.BoxGeometry(sx*2, sy*2, sz*2);
+    // 기본 머티리얼 (픽셀 텍스처 적용 전 폴백)
+    const pMat = new THREE.MeshLambertMaterial({ color: 0xffffff, map: this.texPlayer });
+    const box  = (sx,sy,sz) => new THREE.BoxGeometry(sx*2, sy*2, sz*2);
 
     // 몸통
-    const body = new THREE.Mesh(box(0.4,0.6,0.25), pMat(0x5080cc));
-    body.position.y = 1.0;
-    body.castShadow = true;
+    const body = new THREE.Mesh(box(0.4,0.6,0.25), pMat.clone());
+    body.position.y = 1.0; body.castShadow = true;
     group.add(body);
 
-    // 머리 (pivot at y=1.7)
+    // 머리
     const headPivot = new THREE.Group();
     headPivot.position.y = 1.7;
-    const head = new THREE.Mesh(box(0.25,0.25,0.25), pMat(0x6090dd));
-    head.castShadow = true;
-    headPivot.add(head);
+    const head = new THREE.Mesh(box(0.25,0.25,0.25), pMat.clone());
+    head.castShadow = true; headPivot.add(head);
     group.add(headPivot);
 
-    // 왼다리 pivot (원본: [-0.25,0.3,0], swing around X at pivot_y 0.7)
+    // 왼다리
     const legLPivot = new THREE.Group();
-    legLPivot.position.set(-0.25, 1.0, 0); // pivot을 몸통 상단에
-    const legLMesh = new THREE.Mesh(box(0.2,0.7,0.2), pMat(0x4070bb));
-    legLMesh.position.y = -0.7;
-    legLMesh.castShadow = true;
-    legLPivot.add(legLMesh);
+    legLPivot.position.set(-0.25, 1.0, 0);
+    const legLMesh = new THREE.Mesh(box(0.2,0.7,0.2), pMat.clone());
+    legLMesh.position.y = -0.7; legLMesh.castShadow = true; legLPivot.add(legLMesh);
     group.add(legLPivot);
 
     // 오른다리
     const legRPivot = new THREE.Group();
     legRPivot.position.set(0.25, 1.0, 0);
-    const legRMesh = new THREE.Mesh(box(0.2,0.7,0.2), pMat(0x4070bb));
-    legRMesh.position.y = -0.7;
-    legRMesh.castShadow = true;
-    legRPivot.add(legRMesh);
+    const legRMesh = new THREE.Mesh(box(0.2,0.7,0.2), pMat.clone());
+    legRMesh.position.y = -0.7; legRMesh.castShadow = true; legRPivot.add(legRMesh);
     group.add(legRPivot);
 
-    // 오른팔 (총 드는 쪽, shoulder_y=1.4)
+    // 오른팔
     const armRPivot = new THREE.Group();
     armRPivot.position.set(0.45, 1.4, 0.05);
-    const armRMesh = new THREE.Mesh(box(0.15,0.6,0.15), pMat(0x5080cc));
-    armRMesh.position.y = -0.6;
-    armRMesh.castShadow = true;
-    armRPivot.add(armRMesh);
+    const armRMesh = new THREE.Mesh(box(0.15,0.6,0.15), pMat.clone());
+    armRMesh.position.y = -0.6; armRMesh.castShadow = true; armRPivot.add(armRMesh);
     group.add(armRPivot);
 
     // 왼팔
     const armLPivot = new THREE.Group();
     armLPivot.position.set(-0.45, 1.4, 0.05);
-    const armLMesh = new THREE.Mesh(box(0.15,0.7,0.15), pMat(0x5080cc));
-    armLMesh.position.y = -0.7;
-    armLMesh.castShadow = true;
-    armLPivot.add(armLMesh);
+    const armLMesh = new THREE.Mesh(box(0.15,0.7,0.15), pMat.clone());
+    armLMesh.position.y = -0.7; armLMesh.castShadow = true; armLPivot.add(armLMesh);
     group.add(armLPivot);
 
-    // 총 그룹 (OBJ 로드 완료 시 자동으로 메시 추가됨)
+    // 총 그룹
     const gunGroup = new THREE.Group();
     gunGroup.position.set(0.35, 1.22, 1.2);
-    // OBJ가 이미 로드된 경우 즉시 클론, 아니면 나중에 createOrUpdateRemotePlayer에서 채움
-    if (this._sharedGunObj) {
-      const g = this._cloneGunForPlayer();
-      gunGroup.add(g);
-    }
+    if (this._sharedGunObj) gunGroup.add(this._cloneGunForPlayer());
     group.add(gunGroup);
 
-    // 이름표 (나중에 nickname 확정 후 추가)
-    return { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot, gunGroup, nameplate: null };
+    // 픽셀 텍스처 적용 대상 메시들 (나중에 applyPixels로 업데이트)
+    const bodyMeshes = [body, head, legLMesh, legRMesh, armRMesh, armLMesh];
+
+    return { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot,
+             gunGroup, nameplate: null, bodyMeshes, _lastPixelKey: null };
+  }
+
+  // ── 픽셀 영역 평균색 계산 ──
+  _avgColor(pixels, x0, x1, y0, y1) {
+    let r=0,g=0,b=0,n=0;
+    for (let y=y0; y<=y1; y++) {
+      for (let x=x0; x<=x1; x++) {
+        const col = pixels[y]?.[x];
+        if (col && col !== 'null' && col.startsWith('#')) {
+          r += parseInt(col.slice(1,3),16);
+          g += parseInt(col.slice(3,5),16);
+          b += parseInt(col.slice(5,7),16);
+          n++;
+        }
+      }
+    }
+    if (n===0) return '#888888';
+    return `rgb(${Math.round(r/n)},${Math.round(g/n)},${Math.round(b/n)})`;
   }
 
   // ── 픽셀 배열 → THREE.Texture ──
@@ -349,6 +355,33 @@ export class Renderer {
 
     // 총 반동
     gunGroup.rotation.x = recoil * -0.3;
+
+    // ── 픽셀 텍스처 적용 ──
+    const pixels = info.pixels;
+    const pixelKey = pixels ? JSON.stringify(pixels) : null;
+    if (pixelKey && pixelKey !== parts._lastPixelKey) {
+      const tex = this._pixelsToTexture(pixels);
+      // 픽셀 이미지를 16×16 DataTexture로 만들어 전신에 적용
+      // 각 부위 색상은 픽셀 텍스처의 평균색으로 tint
+      const regions = {
+        // 머리: 픽셀 y=0~4 행 평균색
+        head:  this._avgColor(pixels, 4, 11, 0,  4),
+        // 몸통: y=5~10
+        body:  this._avgColor(pixels, 3, 12, 5, 10),
+        // 다리: y=11~15
+        legs:  this._avgColor(pixels, 4, 11, 11, 15),
+        // 팔: 좌우 각각
+        arms:  this._avgColor(pixels, 0, 15, 5,  9),
+      };
+      const [body, head, legL, legR, armR, armL] = parts.bodyMeshes;
+      head.material.color.set(regions.head);  head.material.map = tex;  head.material.needsUpdate = true;
+      body.material.color.set(regions.body);  body.material.map = tex;  body.material.needsUpdate = true;
+      legL.material.color.set(regions.legs);  legL.material.map = tex;  legL.material.needsUpdate = true;
+      legR.material.color.set(regions.legs);  legR.material.map = tex;  legR.material.needsUpdate = true;
+      armR.material.color.set(regions.arms);  armR.material.map = tex;  armR.material.needsUpdate = true;
+      armL.material.color.set(regions.arms);  armL.material.map = tex;  armL.material.needsUpdate = true;
+      parts._lastPixelKey = pixelKey;
+    }
 
     // 이름표 생성/갱신
     const nickname = info.nickname || pid.slice(-6);
