@@ -1,6 +1,6 @@
 // main.js - 게임 루프, HUD, 이벤트 연결
 
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+import * as THREE from 'three';
 import { Renderer }         from './renderer.js';
 import { CameraController } from './camera.js';
 import { Player }           from './player.js';
