@@ -222,57 +222,42 @@ export class Player {
     scene.add(this.bodyGroup);
   }
 
-  // ── 로컬 픽셀 텍스처 적용 ──
-  applyPixels(pixels, renderer) {
+  // ── 로컬 픽셀 → 부위별 평균색으로 단색 적용 ──
+  // BoxGeometry는 UV가 각 면마다 0~1이라 16x16 DataTexture를 올리면
+  // 텍스처 전체가 늘어나 검게 보임. 대신 평균색을 material.color에 직접 설정.
+  applyPixels(pixels) {
     if (!pixels || !this._bodyMeshes) return;
-    const size = 16;
-    const data = new Uint8Array(size * size * 4);
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const col = pixels[y]?.[x];
-        const i   = (y * size + x) * 4;
-        if (col && col !== 'null' && col.startsWith('#')) {
-          data[i]   = parseInt(col.slice(1,3),16);
-          data[i+1] = parseInt(col.slice(3,5),16);
-          data[i+2] = parseInt(col.slice(5,7),16);
-          data[i+3] = 255;
-        } else {
-          data[i]=data[i+1]=data[i+2]=data[i+3]=0;
-        }
-      }
-    }
-    const tex = new THREE.DataTexture(data, size, size);
-    tex.colorSpace  = THREE.SRGBColorSpace;
-    tex.magFilter   = THREE.NearestFilter;
-    tex.minFilter   = THREE.NearestFilter;
-    tex.needsUpdate = true;
 
-    // 부위별 평균색 계산
-    const avg = (x0,x1,y0,y1) => {
-      let r=0,g=0,b=0,n=0;
-      for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
-        const col=pixels[y]?.[x];
-        if(col&&col!=='null'&&col.startsWith('#')){
-          r+=parseInt(col.slice(1,3),16);
-          g+=parseInt(col.slice(3,5),16);
-          b+=parseInt(col.slice(5,7),16); n++;
+    const avg = (x0, x1, y0, y1) => {
+      let r=0, g=0, b=0, n=0;
+      for (let y=y0; y<=y1; y++) {
+        for (let x=x0; x<=x1; x++) {
+          const col = pixels[y]?.[x];
+          if (col && col !== 'null' && typeof col === 'string' && col.startsWith('#') && col.length === 7) {
+            r += parseInt(col.slice(1,3), 16);
+            g += parseInt(col.slice(3,5), 16);
+            b += parseInt(col.slice(5,7), 16);
+            n++;
+          }
         }
       }
-      return n ? new THREE.Color(r/n/255, g/n/255, b/n/255) : new THREE.Color(0x888888);
+      if (n === 0) return new THREE.Color(0x556688); // 기본색
+      return new THREE.Color(r/n/255, g/n/255, b/n/255);
     };
 
     const [body, head, legL, legR, armR, armL] = this._bodyMeshes;
-    const setMat = (mesh, color) => {
+    const setColor = (mesh, color) => {
+      mesh.material.map   = null;   // 텍스처 제거 (검은색 원인)
       mesh.material.color.copy(color);
-      mesh.material.map = tex;
       mesh.material.needsUpdate = true;
     };
-    setMat(head, avg(4, 11, 0,  4));
-    setMat(body, avg(3, 12, 5, 10));
-    setMat(legL, avg(4, 11, 11,15));
-    setMat(legR, avg(4, 11, 11,15));
-    setMat(armR, avg(0, 15, 5,  9));
-    setMat(armL, avg(0, 15, 5,  9));
+
+    setColor(head, avg(4, 11,  0,  4));   // 머리
+    setColor(body, avg(3, 12,  5, 10));   // 몸통
+    setColor(legL, avg(4,  7, 11, 15));   // 왼다리
+    setColor(legR, avg(8, 11, 11, 15));   // 오른다리
+    setColor(armR, avg(13,15,  5,  9));   // 오른팔
+    setColor(armL, avg(0,  2,  5,  9));   // 왼팔
   }
 
   // ─────────────────────────────────────────
@@ -394,19 +379,26 @@ export class Player {
       if (this.dashCooldown % 30 === 0 && this.onHudUpdate) this.onHudUpdate();
     }
 
-    // 슬라이드
+    // 슬라이드 시작
     if (keys['ShiftLeft'] && !this.isSliding && !this.isJumping && isMoving && this.dashCooldown <= 0) {
       this.isSliding  = true;
-      this.slideSpeed = this.baseSpeed * 3.5;
+      this.slideSpeed = this.baseSpeed * 6.0;   // 더 빠르게
       this.slideDir.copy(moveDir);
       this.dashCooldown = this.dashCooldownMax;
       if (this.onHudUpdate) this.onHudUpdate();
     }
 
+    // 점프 (슬라이드 중에도 가능 → 슬라이드 취소 후 점프)
+    if (keys['Space'] && !this.isJumping) {
+      this.isSliding = false;   // 슬라이드 즉시 취소
+      this.yVel      = this.jumpStr;
+      this.isJumping = true;
+    }
+
     let actualMove = new THREE.Vector3();
     if (this.isSliding) {
       actualMove.copy(this.slideDir).multiplyScalar(this.slideSpeed);
-      this.slideSpeed -= 0.015;
+      this.slideSpeed -= 0.045;   // 빠르게 감속 (짧게)
       if (this.slideSpeed <= this.baseSpeed) this.isSliding = false;
     } else {
       if (isMoving) actualMove.copy(moveDir).multiplyScalar(this.baseSpeed);
@@ -418,12 +410,6 @@ export class Player {
       if (!this.checkCollision(tryX)) this.pos.x = tryX.x;
       const tryZ = this.pos.clone(); tryZ.z += actualMove.z;
       if (!this.checkCollision(tryZ)) this.pos.z = tryZ.z;
-    }
-
-    // 점프
-    if (keys['Space'] && !this.isJumping && !this.isSliding) {
-      this.yVel = this.jumpStr;
-      this.isJumping = true;
     }
 
     // 중력
