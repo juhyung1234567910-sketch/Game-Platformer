@@ -247,13 +247,31 @@ input:focus{border-color:rgba(0,255,224,.7);}
 .preview-wrap{
   margin-top:16px;
   display:flex;
-  align-items:center;
-  gap:16px;
+  flex-direction:column;
+  gap:8px;
 }
 .preview-label{font-size:9px;letter-spacing:3px;opacity:.4;}
 #preview-canvas{
   image-rendering:pixelated;
   border:1px solid rgba(0,255,224,.2);
+  display:block;
+}
+/* 3D 캐릭터 프리뷰 */
+.char-preview-wrap{
+  display:flex;
+  align-items:flex-end;
+  gap:12px;
+  margin-top:8px;
+}
+.char-figure{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:1px;
+}
+.char-figure canvas{
+  image-rendering:pixelated;
+  display:block;
 }
 </style>
 </head>
@@ -312,7 +330,19 @@ input:focus{border-color:rgba(0,255,224,.7);}
         </div>
         <div class="preview-wrap">
           <span class="preview-label">PREVIEW</span>
-          <canvas id="preview-canvas" width="32" height="32" style="width:64px;height:64px"></canvas>
+          <div class="char-preview-wrap">
+            <!-- 정면 -->
+            <div class="char-figure">
+              <canvas id="prev-head"  width="8" height="8"  style="width:32px;height:32px"></canvas>
+              <canvas id="prev-body"  width="10" height="12" style="width:40px;height:48px"></canvas>
+              <div style="display:flex;gap:1px">
+                <canvas id="prev-legl" width="4" height="8" style="width:16px;height:32px"></canvas>
+                <canvas id="prev-legr" width="4" height="8" style="width:16px;height:32px"></canvas>
+              </div>
+            </div>
+          </div>
+          <!-- 숨긴 16×16 플랫 프리뷰 (데이터 소스용) -->
+          <canvas id="preview-canvas" width="16" height="16" style="display:none"></canvas>
         </div>
       </div>
 
@@ -410,10 +440,33 @@ function drawGrid() {
 }
 
 function drawPreview() {
+  // 숨긴 플랫 캔버스 (데이터 소스)
   pctx.clearRect(0,0,16,16);
   for (let y=0;y<GRID;y++)
     for (let x=0;x<GRID;x++)
       if (pixels[y][x]) { pctx.fillStyle=pixels[y][x]; pctx.fillRect(x,y,1,1); }
+
+  // ── 캐릭터 파츠 프리뷰 ──
+  // 각 파츠별 픽셀 영역을 해당 canvas에 그림
+  const drawPart = (canvasId, sx, ex, sy, ey) => {
+    const el = document.getElementById(canvasId);
+    if (!el) return;
+    const w = ex-sx+1, h = ey-sy+1;
+    el.width = w; el.height = h;
+    const ctx2 = el.getContext('2d');
+    ctx2.clearRect(0,0,w,h);
+    for (let y=sy; y<=ey; y++) {
+      for (let x=sx; x<=ex; x++) {
+        const col = pixels[y]?.[x];
+        if (col) { ctx2.fillStyle=col; ctx2.fillRect(x-sx, y-sy, 1, 1); }
+      }
+    }
+  };
+
+  drawPart('prev-head', 4, 11, 0,  4);   // 머리
+  drawPart('prev-body', 3, 12, 5, 10);   // 몸통 (팔 포함)
+  drawPart('prev-legl', 4,  7, 11,15);   // 왼다리
+  drawPart('prev-legr', 8, 11, 11,15);   // 오른다리
 }
 
 function paint(e) {
