@@ -1,8 +1,8 @@
 // network.js - Firebase Realtime Database 멀티플레이어 (닉네임/픽셀/KD 포함)
 
-import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+  from 'firebase/database';
 
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyCHXYjHr67AHEj6cfUUn5jxGfKa3c5adYE",
@@ -56,6 +56,13 @@ export class Network {
         if (info.ts && (Date.now() - info.ts > 3000)) continue;
         others[pid] = info;
       }
+      // 타겟이 리스폰했으면 추적 HP 리셋
+      if (!this._targetHp) this._targetHp = {};
+      for (const [pid, info] of Object.entries(others)) {
+        if (info.health_reset) {
+          this._targetHp[pid] = 100;
+        }
+      }
       this.otherPlayers = others;
       if (this.onPlayersUpdate) this.onPlayersUpdate(others);
     });
@@ -93,11 +100,22 @@ export class Network {
   }
 
   sendHit(targetId, damage = 15) {
+    // 타겟 HP 추적 (로컬에서)
+    if (!this._targetHp) this._targetHp = {};
+    if (this._targetHp[targetId] === undefined) this._targetHp[targetId] = 100;
+    this._targetHp[targetId] = Math.max(0, this._targetHp[targetId] - damage);
+
     set(ref(this.db, `hits/${targetId}`), {
       damage,
       from: this.myId,
       ts:   Date.now()
     }).catch(() => {});
+
+    // HP가 0 이하면 킬로 판정
+    if (this._targetHp[targetId] <= 0) {
+      this._targetHp[targetId] = 100; // 타겟 HP 리셋
+      this.confirmKill(targetId);
+    }
   }
 
   // 킬 확인: 타겟 HP가 0이 되면 킬 카운트 증가
