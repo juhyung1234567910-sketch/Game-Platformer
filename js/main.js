@@ -394,7 +394,7 @@ function checkHit(weaponType = 'rifle') {
   }
 
   if (hitTarget) {
-    network.sendHit(hitTarget, hitDamage);
+    network.sendHit(hitTarget, hitDamage, weaponType);
     showHitmarker(hitPart === 'HEAD');
     pulseHitEffect(hitPart === 'HEAD');
     if (hitPoint) renderer.spawnBulletImpact(hitPoint, hitPart === 'HEAD');
