@@ -34,6 +34,8 @@ export class Player {
     // 무기
     this.ammo          = 30;
     this.maxAmmo       = 30;
+    this.totalAmmo     = 120;   // 총 예비 탄약
+    this.maxTotalAmmo  = 120;
     this.isReloading   = false;
     this.reloadTimer   = 0;
     this.reloadDuration = 60;
@@ -56,6 +58,7 @@ export class Player {
     // 무기 슬롯: 1=총, 4=수류탄
     this.weaponSlot    = 1;
     this.grenadeCount  = 3;        // 수류탄 재고
+    this.maxGrenades   = 3;        // 수류탄 최대치
     this.grenadeCharge = 0;        // 좌클릭 홀드 시간 (0~60프레임)
     this.grenadeMaxCharge = 90;    // 최대 충전 프레임
     this.isChargingGrenade = false;
@@ -336,8 +339,17 @@ export class Player {
     if (this.onHudUpdate) this.onHudUpdate();
   }
 
+  // 보급상자에서 리필
+  refillFromCrate() {
+    this.ammo         = this.maxAmmo;
+    this.totalAmmo    = this.maxTotalAmmo;
+    this.grenadeCount = this.maxGrenades;
+    this.isReloading  = false;
+    if (this.onHudUpdate) this.onHudUpdate();
+  }
+
   startReload() {
-    if (this.ammo < this.maxAmmo && !this.isReloading) {
+    if (this.ammo < this.maxAmmo && !this.isReloading && this.totalAmmo > 0) {
       this.isReloading = true;
       this.reloadTimer = this.reloadDuration;
       if (this.onHudUpdate) this.onHudUpdate();
@@ -493,21 +505,24 @@ export class Player {
       this.reloadTimer--;
       if (this.reloadTimer <= 0) {
         this.isReloading = false;
-        this.ammo = this.maxAmmo;
+        const needed = this.maxAmmo - this.ammo;
+        const fill   = Math.min(needed, this.totalAmmo);
+        this.ammo      += fill;
+        this.totalAmmo -= fill;
         if (this.onHudUpdate) this.onHudUpdate();
       }
     }
 
     // 사망/추락
     if (this.health <= 0 || this.pos.y <= -20) {
-      // 위치/탄약 리셋 (HP는 onDie 콜백 안 network.sendRespawn에서 리셋)
-      this.ammo      = this.maxAmmo;
-      this.isSliding = false;
-      this.yVel      = 0;
+      // 위치/탄약 리셋
+      this.ammo        = this.maxAmmo;
+      this.totalAmmo   = this.maxTotalAmmo;
+      this.grenadeCount = this.maxGrenades;
+      this.isSliding   = false;
+      this.yVel        = 0;
       this.pos.set(0, 1, 5);
-      // onDie 먼저 호출 (network HP 리셋 + 무적 시간 시작)
       if (this.onDie) this.onDie();
-      // onDie 이후 health 확실히 100
       this.health = this.maxHealth;
       if (this.onHudUpdate) this.onHudUpdate();
     }
