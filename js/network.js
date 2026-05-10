@@ -10,19 +10,23 @@ import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child } from
  */
 // network.js 12번째 줄 근처 수정
 // 12번째 줄: ?(Optional Chaining)를 붙여서 에러 방지
-console.log("체크 - DB 주소:", import.meta.env?.VITE_FB_DATABASE_URL || "값 없음");
+// js/network.js
 
-// network.js
-const FIREBASE_CONFIG = {
+// 💡 중요: 아래 문자열들은 GitHub Actions의 sed 명령어가 찾아낼 '표식'입니다.
+// 절대 임의로 수정하지 마세요!
+export const FIREBASE_CONFIG = {
   apiKey:            "__VITE_FB_API_KEY__",
   authDomain:        "__VITE_FB_AUTH_DOMAIN__",
-  databaseURL:       "__VITE_FB_DATABASE_URL__", // <-- 이게 안 바뀌어서 에러가 난 겁니다.
+  databaseURL:       "__VITE_FB_DATABASE_URL__",
   projectId:         "__VITE_FB_PROJECT_ID__",
   storageBucket:     "__VITE_FB_STORAGE_BUCKET__",
   messagingSenderId: "__VITE_FB_MESSAGING_SENDER_ID__",
   appId:             "__VITE_FB_APP_ID__",
   measurementId:     "__VITE_FB_MEASUREMENT_ID__"
 };
+
+// 확인용 로그 (배포 후 브라우저 콘솔에서 확인 가능)
+console.log("Firebase 주소 확인:", FIREBASE_CONFIG.databaseURL);
 
 
 // 환경 변수 로드 확인용 (개발 시에만 확인)
