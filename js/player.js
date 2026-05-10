@@ -55,10 +55,34 @@ export class Player {
     this.boxes    = boxes;
     this.renderer = renderer;
 
-    // 무기 슬롯: 1=총, 4=수류탄
+    // 무기 슬롯: 1=M4A1, 2=저격총, 5=권총, 4=수류탄
     this.weaponSlot    = 1;
     this.grenadeCount  = 3;        // 수류탄 재고
     this.maxGrenades   = 3;        // 수류탄 최대치
+
+    // ── 저격총 ──
+    this.sniperAmmo       = 5;
+    this.sniperMaxAmmo    = 5;
+    this.sniperTotalAmmo  = 20;
+    this.sniperMaxTotal   = 20;
+    this.sniperReloading  = false;
+    this.sniperReloadTimer = 0;
+    this.sniperReloadDur  = 120;   // 2초
+    this.isScopedIn       = false;
+    this.scopeProgress    = 0;     // 0→1 (스코프 줌 진행도)
+    this._slot2Held       = false;
+
+    // ── 권총 ──
+    this.pistolAmmo       = 12;
+    this.pistolMaxAmmo    = 12;
+    this.pistolTotalAmmo  = 48;
+    this.pistolMaxTotal   = 48;
+    this.pistolReloading  = false;
+    this.pistolReloadTimer = 0;
+    this.pistolReloadDur  = 70;    // ~1.2초
+    this.pistolFireCd     = 0;
+    this.pistolFireRate   = 15;    // 반자동 쿨다운
+    this._slot5Held       = false;
 
     // 붕대
     this.bandageCount    = 0;      // 현재 소지 (최대 1)
@@ -72,6 +96,8 @@ export class Player {
     this._slot4Held   = false;
     this._slot1Held   = false;
     this._slot3Held   = false;
+    this._slot2Held   = false;
+    this._slot5Held   = false;
 
     // 수류탄 시스템 (renderer.scene 필요하므로 나중에 init)
     this.grenadeSystem = null;
@@ -115,6 +141,36 @@ export class Player {
     this._fpGrenadeGroup.add(gMesh, pin);
     this._fpGrenadeGroup.position.set(0.18, -0.80, -0.40);
     renderer.weaponScene.add(this._fpGrenadeGroup);
+
+    // ── 1인칭 저격총 그룹 (간단 박스 모델) ──
+    this._fpSniperGroup = new THREE.Group();
+    this._fpSniperGroup.visible = false;
+    const sMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    const sMat2 = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const sBody = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.07, 0.70), sMat);
+    const sBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.30), sMat2);
+    sBarrel.position.set(0, 0.015, -0.50);
+    const sScope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.20, 8), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    sScope.rotation.x = Math.PI / 2;
+    sScope.position.set(0, 0.06, 0.0);
+    const sGrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.05), sMat2);
+    sGrip.position.set(0, -0.085, 0.10);
+    this._fpSniperGroup.add(sBody, sBarrel, sScope, sGrip);
+    this._fpSniperGroup.position.set(0.22, -0.78, -0.55);
+    renderer.weaponScene.add(this._fpSniperGroup);
+
+    // ── 1인칭 권총 그룹 ──
+    this._fpPistolGroup = new THREE.Group();
+    this._fpPistolGroup.visible = false;
+    const pMat3 = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+    const pBody = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.18), pMat3);
+    const pBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.10), pMat3);
+    pBarrel.position.set(0, 0.015, -0.14);
+    const pGrip2 = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.12, 0.055), new THREE.MeshLambertMaterial({ color: 0x3a2a1a }));
+    pGrip2.position.set(0, -0.10, 0.06);
+    this._fpPistolGroup.add(pBody, pBarrel, pGrip2);
+    this._fpPistolGroup.position.set(0.20, -0.75, -0.45);
+    renderer.weaponScene.add(this._fpPistolGroup);
 
     // OBJ 비동기 로드
     this._loadGun(renderer);
@@ -352,16 +408,30 @@ export class Player {
   refillFromCrate() {
     this.ammo         = this.maxAmmo;
     this.totalAmmo    = this.maxTotalAmmo;
+    this.sniperAmmo   = this.sniperMaxAmmo;
+    this.sniperTotalAmmo = this.sniperMaxTotal;
+    this.pistolAmmo   = this.pistolMaxAmmo;
+    this.pistolTotalAmmo = this.pistolMaxTotal;
     this.grenadeCount = this.maxGrenades;
-    this.bandageCount = this.maxBandage;   // 붕대 1개 보충
+    this.bandageCount = this.maxBandage;
     this.isReloading  = false;
+    this.sniperReloading = false;
+    this.pistolReloading = false;
     if (this.onHudUpdate) this.onHudUpdate();
   }
 
   startReload() {
-    if (this.ammo < this.maxAmmo && !this.isReloading && this.totalAmmo > 0) {
+    if (this.weaponSlot === 1 && this.ammo < this.maxAmmo && !this.isReloading && this.totalAmmo > 0) {
       this.isReloading = true;
       this.reloadTimer = this.reloadDuration;
+      if (this.onHudUpdate) this.onHudUpdate();
+    } else if (this.weaponSlot === 2 && this.sniperAmmo < this.sniperMaxAmmo && !this.sniperReloading && this.sniperTotalAmmo > 0) {
+      this.sniperReloading = true;
+      this.sniperReloadTimer = this.sniperReloadDur;
+      if (this.onHudUpdate) this.onHudUpdate();
+    } else if (this.weaponSlot === 5 && this.pistolAmmo < this.pistolMaxAmmo && !this.pistolReloading && this.pistolTotalAmmo > 0) {
+      this.pistolReloading = true;
+      this.pistolReloadTimer = this.pistolReloadDur;
       if (this.onHudUpdate) this.onHudUpdate();
     }
   }
@@ -395,12 +465,16 @@ export class Player {
     // 무기 슬롯 전환
     if (keys['Digit1'] && !this._slot1Held) { this.weaponSlot = 1; this._slot1Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit1']) this._slot1Held = false;
+    if (keys['Digit2'] && !this._slot2Held) { this.weaponSlot = 2; this._slot2Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (!keys['Digit2']) this._slot2Held = false;
+    if (keys['Digit5'] && !this._slot5Held) { this.weaponSlot = 5; this._slot5Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (!keys['Digit5']) this._slot5Held = false;
     if (keys['Digit4'] && !this._slot4Held && this.grenadeCount > 0) { this.weaponSlot = 4; this._slot4Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit4']) this._slot4Held = false;
     if (keys['Digit3'] && !this._slot3Held && this.bandageCount > 0) { this.weaponSlot = 3; this._slot3Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit3']) this._slot3Held = false;
 
-    // M키 사격모드 (총 슬롯에서만)
+    // M키 사격모드 (M4A1 슬롯에서만, 저격/권총은 SEMI 고정)
     if (this.weaponSlot === 1) {
       if (keys['KeyM']) {
         if (!this.mKeyHeld) {
@@ -413,9 +487,10 @@ export class Player {
 
     // ── 슬롯별 좌클릭 동작 ──
     this.fireCooldown = Math.max(0, this.fireCooldown - 1);
+    this.pistolFireCd = Math.max(0, this.pistolFireCd - 1);
 
     if (this.weaponSlot === 1) {
-      // 총: 기존 사격
+      // M4A1: AUTO/SEMI
       if (mouse.left) {
         if (this.fireMode === 'AUTO') {
           if (this.fireCooldown === 0) { this.shoot(checkHitFn); this.fireCooldown = this.fireRate; }
@@ -423,6 +498,63 @@ export class Player {
           if (!this.mouseLeftHeld) { this.shoot(checkHitFn); this.mouseLeftHeld = true; }
         }
       } else { this.mouseLeftHeld = false; }
+      this.isScopedIn = false; this.scopeProgress = 0;
+      this.isChargingGrenade = false;
+      this.grenadeCharge = 0;
+      this.isBandaging = false;
+
+    } else if (this.weaponSlot === 2) {
+      // ── 저격총: SEMI, 우클릭 스코프 ──
+      this.isScopedIn = mouse.right && !this.sniperReloading;
+      this.scopeProgress += (this.isScopedIn ? 1 : -1) * 0.12;
+      this.scopeProgress = Math.max(0, Math.min(1, this.scopeProgress));
+
+      if (mouse.left && !this.mouseLeftHeld) {
+        if (!this.sniperReloading && this.sniperAmmo > 0) {
+          this.sniperAmmo--;
+          this.recoilOffset = 0.6;
+          this.recoilRoll   = (Math.random() * 10 - 5);
+          if (checkHitFn) checkHitFn('sniper');
+          if (this.onShoot)     this.onShoot();
+          if (this.onHudUpdate) this.onHudUpdate();
+        }
+        this.mouseLeftHeld = true;
+      }
+      if (!mouse.left) this.mouseLeftHeld = false;
+
+      // 자동 리로드 (탄이 0이면)
+      if (this.sniperAmmo === 0 && !this.sniperReloading && this.sniperTotalAmmo > 0) {
+        this.sniperReloading = true;
+        this.sniperReloadTimer = this.sniperReloadDur;
+        if (this.onHudUpdate) this.onHudUpdate();
+      }
+      this.isChargingGrenade = false;
+      this.grenadeCharge = 0;
+      this.isBandaging = false;
+
+    } else if (this.weaponSlot === 5) {
+      // ── 권총: SEMI ──
+      this.isScopedIn = false; this.scopeProgress = 0;
+      if (mouse.left && !this.mouseLeftHeld) {
+        if (!this.pistolReloading && this.pistolAmmo > 0 && this.pistolFireCd === 0) {
+          this.pistolAmmo--;
+          this.recoilOffset = 0.2;
+          this.recoilRoll   = (Math.random() * 4 - 2);
+          if (checkHitFn) checkHitFn('pistol');
+          if (this.onShoot)     this.onShoot();
+          if (this.onHudUpdate) this.onHudUpdate();
+          this.pistolFireCd = this.pistolFireRate;
+        }
+        this.mouseLeftHeld = true;
+      }
+      if (!mouse.left) this.mouseLeftHeld = false;
+
+      // 자동 리로드
+      if (this.pistolAmmo === 0 && !this.pistolReloading && this.pistolTotalAmmo > 0) {
+        this.pistolReloading = true;
+        this.pistolReloadTimer = this.pistolReloadDur;
+        if (this.onHudUpdate) this.onHudUpdate();
+      }
       this.isChargingGrenade = false;
       this.grenadeCharge = 0;
       this.isBandaging = false;
@@ -536,6 +668,32 @@ export class Player {
       }
     }
 
+    // 저격총 리로드
+    if (this.sniperReloading) {
+      this.sniperReloadTimer--;
+      if (this.sniperReloadTimer <= 0) {
+        this.sniperReloading = false;
+        const needed = this.sniperMaxAmmo - this.sniperAmmo;
+        const fill   = Math.min(needed, this.sniperTotalAmmo);
+        this.sniperAmmo      += fill;
+        this.sniperTotalAmmo -= fill;
+        if (this.onHudUpdate) this.onHudUpdate();
+      }
+    }
+
+    // 권총 리로드
+    if (this.pistolReloading) {
+      this.pistolReloadTimer--;
+      if (this.pistolReloadTimer <= 0) {
+        this.pistolReloading = false;
+        const needed = this.pistolMaxAmmo - this.pistolAmmo;
+        const fill   = Math.min(needed, this.pistolTotalAmmo);
+        this.pistolAmmo      += fill;
+        this.pistolTotalAmmo -= fill;
+        if (this.onHudUpdate) this.onHudUpdate();
+      }
+    }
+
     // 붕대 사용 타이머
     if (this.isBandaging) {
       this.bandageTimer--;
@@ -612,14 +770,16 @@ export class Player {
     const fp = camCtrl.isFirstPerson;
 
     // 슬롯에 따라 표시/숨김
-    this._fpWeaponGroup.visible  = fp && this.weaponSlot === 1;
+    this._fpWeaponGroup.visible  = fp && (this.weaponSlot === 1);
     this._fpGrenadeGroup.visible = fp && this.weaponSlot === 4;
+    // 저격총/권총은 별도 그룹 (없으면 기본 총 그룹 재활용)
+    if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && this.weaponSlot === 2;
+    if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && this.weaponSlot === 5;
 
     if (!fp) return;
 
     // ── 수류탄 슬롯 애니메이션 ──
     if (this.weaponSlot === 4) {
-      // 충전할수록 살짝 뒤로 당기는 모션
       const charge = this.grenadeCharge / this.grenadeMaxCharge;
       const bob = Math.sin(this.moveTime * 10) * 0.004 * this.bobAmp;
       this._fpGrenadeGroup.position.set(
@@ -627,7 +787,6 @@ export class Player {
         -0.80 - charge * 0.08 + bob,
         -0.40 + charge * 0.12
       );
-      // 충전 시 살짝 흔들기
       this._fpGrenadeGroup.rotation.set(
         Math.sin(this.moveTime * 7) * 0.02 * this.bobAmp,
         Math.PI * 0.05,
@@ -637,9 +796,7 @@ export class Player {
     }
 
     const ads  = this.adsProgress;
-    // hip: 오른쪽, 아래, 앞으로 (Z 값을 -0.5로 당겨서 총이 앞에 보이게)
     const hipX = 0.22, hipY = -0.78, hipZ = -0.55;
-    // ads: 중앙, 약간 위, 더 앞으로
     const adsX = 0.0,  adsY = -0.68, adsZ = -0.30;
 
     const recoilZ = this.recoilOffset;
@@ -649,7 +806,39 @@ export class Player {
     const bobX = Math.cos(this.moveTime * 5)  * 0.006 * this.bobAmp * bobFactor;
     const bobY = Math.sin(this.moveTime * 10) * 0.006 * this.bobAmp * bobFactor;
 
-    // 리로드 애니메이션
+    // ── 저격총 슬롯 ──
+    if (this.weaponSlot === 2) {
+      const scope = this.scopeProgress;
+      // 스코프 시 중앙으로, 손 떨림 최소화
+      const sx = 0.22 + (0.0 - 0.22) * scope;
+      const sy = -0.78 + (0.68 - 0.78) * scope;  // 살짝 위로
+      const sz = -0.55 + (-0.20 + 0.55) * scope;  // 더 앞으로
+      let grp = this._fpSniperGroup || this._fpWeaponGroup;
+      const bx = Math.cos(this.moveTime * 5)  * 0.006 * this.bobAmp * (scope > 0.5 ? 0.1 : 1.0);
+      const by = Math.sin(this.moveTime * 10) * 0.006 * this.bobAmp * (scope > 0.5 ? 0.1 : 1.0);
+      grp.position.set(sx + bx, sy + recoilY + by, sz + recoilZ);
+      grp.rotation.set(
+        THREE.MathUtils.degToRad(0),
+        Math.PI,
+        THREE.MathUtils.degToRad(0)
+      );
+      return;
+    }
+
+    // ── 권총 슬롯 ──
+    if (this.weaponSlot === 5) {
+      let grp = this._fpPistolGroup || this._fpWeaponGroup;
+      const isAimingP = mouse ? this.mouse.right : false;
+      const pAds = this.adsProgress;
+      const px = hipX + (adsX - hipX) * pAds + bobX;
+      const py = hipY + (adsY - hipY) * pAds + recoilY + bobY;
+      const pz = hipZ + (adsZ - hipZ) * pAds + recoilZ;
+      grp.position.set(px, py, pz);
+      grp.rotation.set(0, Math.PI, 0);
+      return;
+    }
+
+    // ── M4A1 슬롯 ──
     let reloadY = 0, reloadRX = 0, reloadRZ = 0;
     if (this.isReloading) {
       const prog = 1 - (this.reloadTimer / this.reloadDuration);
