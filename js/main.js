@@ -294,29 +294,21 @@ function checkHit() {
 }
 
 // ── 보급상자 ──
-const CRATE_POS = new THREE.Vector3(0, 2.2, 0);   // 스폰 근처 바닥 위
 const CRATE_INTERACT_DIST = 3.5;
 
-// 상자 메시
-const crateMat  = new THREE.MeshLambertMaterial({ color: 0x997733 });
-const crateGeo  = new THREE.BoxGeometry(1.2, 1.2, 1.2);
-const crateMesh = new THREE.Mesh(crateGeo, crateMat);
-crateMesh.position.copy(CRATE_POS);
-crateMesh.castShadow = crateMesh.receiveShadow = true;
-renderer.scene.add(crateMesh);
+// 플랫폼별 상자 위치 [x, y, z]
+// 각 플랫폼 중앙, 구조물이 있으면 그 뒤쪽에 배치
+// 1) 스폰(y=1):  코너 기둥 뒤  → z=+방향쪽 안쪽
+// 2) 계단 플랫폼(y=6):  왼쪽 탑(x=-13,z=42) 뒤 → z=44
+// 3) 중간 플랫폼(y=13.5): 큐브(0,15,99) 뒤 → z=102
+// 4) 최종 플랫폼(y=24):  큰 큐브(0,25,152) 뒤 → z=156
+const CRATE_DEFS = [
+  { pos: new THREE.Vector3(  0,  2.2,  12) },   // 스폰: 뒤쪽 기둥 앞
+  { pos: new THREE.Vector3(-13,  7.6,  44) },   // 계단 플랫폼: 왼쪽 탑 뒤
+  { pos: new THREE.Vector3(  0, 14.6, 102) },   // 중간 플랫폼: 큐브 뒤
+  { pos: new THREE.Vector3(  0, 24.6, 156) },   // 최종 플랫폼: 큰 큐브 뒤
+];
 
-// 십자 표시 (위쪽 면에 빨간 십자)
-const crossMatV = new THREE.MeshBasicMaterial({ color: 0xff2222 });
-const crossMatH = new THREE.MeshBasicMaterial({ color: 0xff2222 });
-const crossV    = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.02, 0.55), crossMatV);
-const crossH    = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.02, 0.15), crossMatH);
-crossV.position.set(0, 0.62, 0);
-crossH.position.set(0, 0.62, 0);
-renderer.scene.add(crossV, crossH);
-crossV.position.copy(CRATE_POS); crossV.position.y += 0.62;
-crossH.position.copy(CRATE_POS); crossH.position.y += 0.62;
-
-// E 라벨 스프라이트 (플레이어 이름표와 동일 방식)
 function makeELabel() {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 80;
@@ -344,20 +336,54 @@ function makeELabel() {
   return sprite;
 }
 
-const crateLabel = makeELabel();
-crateLabel.position.copy(CRATE_POS);
-crateLabel.position.y += 1.6;
-renderer.scene.add(crateLabel);
+// 상자 생성 함수
+function buildCrate(pos) {
+  const group = new THREE.Group();
+  group.position.copy(pos);
+
+  // 몸통
+  const mat  = new THREE.MeshLambertMaterial({ color: 0x997733 });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), mat);
+  mesh.castShadow = mesh.receiveShadow = true;
+  group.add(mesh);
+
+  // 십자 표시 (윗면)
+  const crossMat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+  const cV = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.03, 0.55), crossMat);
+  const cH = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 0.15), crossMat);
+  cV.position.y = cH.position.y = 0.62;
+  group.add(cV, cH);
+
+  renderer.scene.add(group);
+
+  // 라벨 스프라이트
+  const label = makeELabel();
+  label.position.copy(pos);
+  label.position.y += 1.6;
+  renderer.scene.add(label);
+
+  return { group, mesh, mat, label, pos };
+}
+
+const crates = CRATE_DEFS.map(d => buildCrate(d.pos));
 
 // E키 상호작용
 window.addEventListener('keydown', e => {
   if (e.code !== 'KeyE') return;
-  if (player.pos.distanceTo(CRATE_POS) <= CRATE_INTERACT_DIST) {
-    player.refillFromCrate();
-    addKillfeed('📦 보급 완료! 탄약 + 수류탄 리필');
-    // 상자 깜빡 피드백
-    crateMesh.material.color.set(0x00ff88);
-    setTimeout(() => crateMesh.material.color.set(0x997733), 300);
+  // 탄약·수류탄 모두 가득 차면 무시
+  const isFull = player.ammo === player.maxAmmo &&
+                 player.totalAmmo === player.maxTotalAmmo &&
+                 player.grenadeCount === player.maxGrenades;
+  if (isFull) return;
+
+  for (const crate of crates) {
+    if (player.pos.distanceTo(crate.pos) <= CRATE_INTERACT_DIST) {
+      player.refillFromCrate();
+      addKillfeed('📦 보급 완료! 탄약 + 수류탄 리필');
+      crate.mat.color.set(0x00ff88);
+      setTimeout(() => crate.mat.color.set(0x997733), 300);
+      break;
+    }
   }
 });
 
@@ -448,11 +474,15 @@ function loop() {
     renderer.updateParticles(dt);
     network.sendUpdate(player.getSnapshot(camCtrl));
 
-    // 보급상자 라벨: 가까이 있을 때만 표시, 카메라를 향하도록 (Sprite 자동 빌보드)
-    const crateDist = player.pos.distanceTo(CRATE_POS);
-    crateLabel.visible = crateDist <= CRATE_INTERACT_DIST;
-    // 상자 천천히 회전
-    crateMesh.rotation.y += 0.008;
+    // 보급상자: 가까이 있고 탄약이 부족할 때만 라벨 표시, 상자 회전
+    const isFull = player.ammo === player.maxAmmo &&
+                   player.totalAmmo === player.maxTotalAmmo &&
+                   player.grenadeCount === player.maxGrenades;
+    for (const crate of crates) {
+      const near = player.pos.distanceTo(crate.pos) <= CRATE_INTERACT_DIST;
+      crate.label.visible = near && !isFull;
+      crate.group.rotation.y += 0.008;
+    }
 
     // ── 수류탄 충전바 / 슬롯 UI ──
     if (player.weaponSlot === 4 && player.isChargingGrenade) {
