@@ -22,7 +22,7 @@ export class Player {
     this.slideSpeed      = 0;
     this.slideDir        = new THREE.Vector3();
     this.dashCooldown    = 0;
-    this.dashCooldownMax = 90;
+    this.dashCooldownMax = 10;
 
     // 애니메이션
     this.moveTime    = 0;
@@ -448,7 +448,7 @@ export class Player {
     // 슬라이드 시작
     if (keys['ShiftLeft'] && !this.isSliding && !this.isJumping && isMoving && this.dashCooldown <= 0) {
       this.isSliding  = true;
-      this.slideSpeed = this.baseSpeed * 6.0;   // 더 빠르게
+      this.slideSpeed = this.baseSpeed * 5.5;   // 슬라이드 속도 (baseSpeed * 5.5)
       this.slideDir.copy(moveDir);
       this.dashCooldown = this.dashCooldownMax;
       if (this.onHudUpdate) this.onHudUpdate();
