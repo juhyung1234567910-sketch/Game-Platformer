@@ -1,9 +1,9 @@
-// network.js - Firebase Realtime Database 멀티플레이어
+// network.js - Firebase Realtime Database 멀티플레이어 (닉네임/픽셀/KD 포함)
 
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, set, onValue, remove, onDisconnect } from 'firebase/database';
+import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child }
+  from 'firebase/database';
 
-// ⚠️ 아래 __값__ 들은 GitHub Actions가 자동으로 채워줍니다. 직접 수정하지 마세요!
 const FIREBASE_CONFIG = {
   apiKey:            "__VITE_FB_API_KEY__",
   authDomain:        "__VITE_FB_AUTH_DOMAIN__",
@@ -15,8 +15,9 @@ const FIREBASE_CONFIG = {
   measurementId:     "__VITE_FB_MEASUREMENT_ID__"
 };
 
-if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.startsWith("__")) {
-  console.warn("⚠️ Firebase 환경 변수가 주입되지 않았습니다. GitHub Actions 로그를 확인하세요.");
+// 배포 시 GitHub Actions가 위 플레이스홀더를 실제 값으로 치환합니다
+if (FIREBASE_CONFIG.apiKey.startsWith('__')) {
+  console.warn('⚠️ Firebase 환경 변수가 주입되지 않았습니다. GitHub Actions 로그를 확인하세요.');
 }
 
 const fireApp = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
@@ -24,31 +25,34 @@ const fireApp = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG)
 export class Network {
   constructor(userInfo) {
     this.db       = getDatabase(fireApp);
-    this.myId     = userInfo.nickname;
+    this.myId     = userInfo.nickname;          // 닉네임을 ID로 사용
     this.nickname = userInfo.nickname;
     this.pixels   = userInfo.pixels;
 
     this.otherPlayers = {};
     this.myHealth     = 100;
 
+    // 킬뎃
     this.kills  = userInfo.kills  || 0;
     this.deaths = userInfo.deaths || 0;
 
+    // 리스폰 무적
     this._respawnTime        = Date.now();
     this._invincibleDuration = 3000;
 
     this.onPlayersUpdate = null;
     this.onHealthUpdate  = null;
     this.onHit           = null;
-    this.onKill          = null;
+    this.onKill          = null;   // 킬 발생 시 콜백
 
-    this._lastSend     = 0;
+    this._lastSend    = 0;
     this._sendInterval = 50;
 
     this._setupListeners();
   }
 
   _setupListeners() {
+    // 전체 플레이어 구독
     onValue(ref(this.db, 'players'), snapshot => {
       const data = snapshot.val() || {};
       const others = {};
@@ -57,7 +61,7 @@ export class Network {
         if (info.ts && (Date.now() - info.ts > 3000)) continue;
         others[pid] = info;
       }
-
+      // 타겟이 리스폰했으면 추적 HP 리셋
       if (!this._targetHp) this._targetHp = {};
       for (const [pid, info] of Object.entries(others)) {
         if (info.health_reset) {
@@ -68,6 +72,7 @@ export class Network {
       if (this.onPlayersUpdate) this.onPlayersUpdate(others);
     });
 
+    // 피격 이벤트
     const hitRef = ref(this.db, `hits/${this.myId}`);
     onValue(hitRef, snapshot => {
       const data = snapshot.val();
@@ -100,6 +105,7 @@ export class Network {
   }
 
   sendHit(targetId, damage = 15) {
+    // 타겟 HP 추적 (로컬에서)
     if (!this._targetHp) this._targetHp = {};
     if (this._targetHp[targetId] === undefined) this._targetHp[targetId] = 100;
     this._targetHp[targetId] = Math.max(0, this._targetHp[targetId] - damage);
@@ -110,15 +116,18 @@ export class Network {
       ts:   Date.now()
     }).catch(() => {});
 
+    // HP가 0 이하면 킬로 판정
     if (this._targetHp[targetId] <= 0) {
-      this._targetHp[targetId] = 100;
+      this._targetHp[targetId] = 100; // 타겟 HP 리셋
       this.confirmKill(targetId);
     }
   }
 
+  // 킬 확인: 타겟 HP가 0이 되면 킬 카운트 증가
   async confirmKill(targetId) {
     this.kills++;
-    set(ref(this.db, `users/${this.myId}/kills`), this.kills).catch(() => {});
+    // DB에 킬 저장
+    set(ref(this.db, `users/${this.myId}/kills`), this.kills).catch(()=>{});
     if (this.onKill) this.onKill(targetId, this.kills, this.deaths);
   }
 
@@ -127,7 +136,7 @@ export class Network {
     this.myHealth     = 100;
     this._respawnTime = now;
     this.deaths++;
-    set(ref(this.db, `users/${this.myId}/deaths`), this.deaths).catch(() => {});
+    set(ref(this.db, `users/${this.myId}/deaths`), this.deaths).catch(()=>{});
     remove(ref(this.db, `hits/${this.myId}`)).catch(() => {});
     set(ref(this.db, `players/${this.myId}`), {
       pos:          posArr,
