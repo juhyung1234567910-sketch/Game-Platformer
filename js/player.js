@@ -59,11 +59,19 @@ export class Player {
     this.weaponSlot    = 1;
     this.grenadeCount  = 3;        // 수류탄 재고
     this.maxGrenades   = 3;        // 수류탄 최대치
+
+    // 붕대
+    this.bandageCount    = 0;      // 현재 소지 (최대 1)
+    this.maxBandage      = 1;
+    this.isBandaging     = false;
+    this.bandageTimer    = 0;
+    this.bandageDuration = 90;     // 1.5초 (60fps 기준)
     this.grenadeCharge = 0;        // 좌클릭 홀드 시간 (0~60프레임)
     this.grenadeMaxCharge = 90;    // 최대 충전 프레임
     this.isChargingGrenade = false;
     this._slot4Held   = false;
     this._slot1Held   = false;
+    this._slot3Held   = false;
 
     // 수류탄 시스템 (renderer.scene 필요하므로 나중에 init)
     this.grenadeSystem = null;
@@ -74,9 +82,10 @@ export class Player {
     this._bindInput();
 
     // 콜백
-    this.onShoot     = null;
-    this.onHudUpdate = null;
-    this.onDie       = null;
+    this.onShoot      = null;
+    this.onHudUpdate  = null;
+    this.onDie        = null;
+    this.onBandageUsed = null;
 
     // OBJ 로드 완료 후 채워질 메시 (그 전까진 null)
     this._gunMesh1P   = null;   // 1인칭 weaponScene용
@@ -344,6 +353,7 @@ export class Player {
     this.ammo         = this.maxAmmo;
     this.totalAmmo    = this.maxTotalAmmo;
     this.grenadeCount = this.maxGrenades;
+    this.bandageCount = this.maxBandage;   // 붕대 1개 보충
     this.isReloading  = false;
     if (this.onHudUpdate) this.onHudUpdate();
   }
@@ -387,6 +397,8 @@ export class Player {
     if (!keys['Digit1']) this._slot1Held = false;
     if (keys['Digit4'] && !this._slot4Held && this.grenadeCount > 0) { this.weaponSlot = 4; this._slot4Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit4']) this._slot4Held = false;
+    if (keys['Digit3'] && !this._slot3Held && this.bandageCount > 0) { this.weaponSlot = 3; this._slot3Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (!keys['Digit3']) this._slot3Held = false;
 
     // M키 사격모드 (총 슬롯에서만)
     if (this.weaponSlot === 1) {
@@ -413,6 +425,7 @@ export class Player {
       } else { this.mouseLeftHeld = false; }
       this.isChargingGrenade = false;
       this.grenadeCharge = 0;
+      this.isBandaging = false;
 
     } else if (this.weaponSlot === 4) {
       // 수류탄: 좌클릭 홀드로 충전, 떼면 투척
@@ -433,6 +446,16 @@ export class Player {
         this.isChargingGrenade = false;
         if (this.onHudUpdate) this.onHudUpdate();
       }
+      this.isBandaging = false;
+
+    } else if (this.weaponSlot === 3) {
+      // 붕대: 좌클릭 홀드 1.5초 → 30 HP 회복
+      if (mouse.left && this.bandageCount > 0 && this.health < this.maxHealth && !this.isBandaging) {
+        this.isBandaging  = true;
+        this.bandageTimer = this.bandageDuration;
+      }
+      this.isChargingGrenade = false;
+      this.grenadeCharge = 0;
     }
 
     // Roll
@@ -513,14 +536,33 @@ export class Player {
       }
     }
 
+    // 붕대 사용 타이머
+    if (this.isBandaging) {
+      this.bandageTimer--;
+      if (this.bandageTimer <= 0) {
+        this.isBandaging  = false;
+        this.health       = Math.min(this.maxHealth, this.health + 30);
+        this.bandageCount = Math.max(0, this.bandageCount - 1);
+        if (this.bandageCount === 0) this.weaponSlot = 1;
+        if (this.onHudUpdate) this.onHudUpdate();
+        if (this.onBandageUsed) this.onBandageUsed();
+      }
+      // 마우스 떼거나 이동하면 취소
+      if (!this.mouse.left) {
+        this.isBandaging = false;
+        this.bandageTimer = 0;
+      }
+    }
+
     // 사망/추락
     if (this.health <= 0 || this.pos.y <= -20) {
-      // 위치/탄약 리셋
-      this.ammo        = this.maxAmmo;
-      this.totalAmmo   = this.maxTotalAmmo;
+      this.ammo         = this.maxAmmo;
+      this.totalAmmo    = this.maxTotalAmmo;
       this.grenadeCount = this.maxGrenades;
-      this.isSliding   = false;
-      this.yVel        = 0;
+      this.bandageCount = 0;          // 붕대는 죽으면 소멸
+      this.isBandaging  = false;
+      this.isSliding    = false;
+      this.yVel         = 0;
       this.pos.set(0, 1, 5);
       if (this.onDie) this.onDie();
       this.health = this.maxHealth;
