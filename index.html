@@ -22,19 +22,44 @@
     #lock-btn { pointer-events:all !important; z-index:200; cursor:pointer; }
     #combat-navbar {
       position: fixed;
-      top: 18px;
-      left: 24px;
-      right: 24px;
-      height: 46px;
+      top: 14px;
+      left: 18px;
+      right: 18px;
+      min-height: 64px;
       display: grid;
-      grid-template-columns: 1fr auto 1fr;
+      grid-template-columns: minmax(210px, 1fr) minmax(330px, auto) minmax(330px, 1fr);
       align-items: center;
+      gap: 14px;
+      padding: 8px 12px;
       z-index: 12;
       pointer-events: none;
+      background: rgba(3, 10, 14, .74);
+      border: 1px solid rgba(0,255,224,.18);
+      border-radius: 6px;
+      box-shadow: 0 18px 60px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.035);
+      backdrop-filter: blur(14px);
       animation: navDrop .55s cubic-bezier(.16,1,.3,1) both;
     }
+    #combat-navbar::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(0,255,224,.12), transparent 28%, transparent 72%, rgba(255,204,0,.08));
+      opacity: .58;
+    }
+    .nav-section {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .nav-left { justify-self: start; }
+    .nav-center { justify-self: center; justify-content: center; }
+    .nav-right { justify-self: end; justify-content: flex-end; }
     .nav-brand {
-      justify-self: start;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -53,24 +78,32 @@
       transform: rotate(45deg);
       animation: navPulse 1.8s ease-in-out infinite;
     }
-    .nav-center {
-      justify-self: center;
+    .nav-chip {
       display: flex;
       align-items: center;
-      gap: 14px;
-      min-width: min(520px, 52vw);
-      justify-content: center;
-      padding: 8px 18px;
-      background: linear-gradient(90deg, transparent, rgba(0,0,0,.52) 12%, rgba(0,0,0,.68) 50%, rgba(0,0,0,.52) 88%, transparent);
-      border-top: 1px solid rgba(0,255,224,.18);
-      border-bottom: 1px solid rgba(0,255,224,.18);
-      box-shadow: 0 0 34px rgba(0,255,224,.05);
+      gap: 8px;
+      min-height: 38px;
+      padding: 7px 10px;
+      background: rgba(0,0,0,.28);
+      border: 1px solid rgba(255,255,255,.075);
+      border-radius: 4px;
+      box-shadow: inset 0 -1px 0 rgba(255,255,255,.035);
     }
-    .nav-right {
-      justify-self: end;
+    .nav-stack {
       display: flex;
-      align-items: center;
-      gap: 14px;
+      flex-direction: column;
+      gap: 2px;
+      line-height: 1.1;
+    }
+    .nav-label {
+      font-size: 8px;
+      letter-spacing: 2px;
+      opacity: .42;
+    }
+    .nav-value {
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: #00ffe0;
     }
 
     /* ── 스코어보드 (TAB) ── */
@@ -148,11 +181,11 @@
     /* TAB 힌트 */
     #tab-hint {
       position: fixed;
-      bottom: 130px;
-      right: 32px;
+      bottom: 24px;
+      left: 24px;
       font-size: 9px;
       letter-spacing: 3px;
-      opacity: .25;
+      opacity: .22;
       pointer-events: none;
     }
 
@@ -191,18 +224,25 @@
     /* 무기 슬롯 표시 */
     #weapon-slots {
       position: fixed;
-      bottom: 108px;
+      bottom: 24px;
       left: 50%;
       transform: translateX(-50%);
       display: grid;
-      grid-template-columns: repeat(5, minmax(92px, auto));
-      gap: 8px;
+      grid-template-columns: repeat(5, minmax(82px, 1fr));
+      width: min(620px, calc(100vw - 220px));
+      gap: 6px;
       align-items: end;
       pointer-events: none;
+      padding: 8px;
+      border: 1px solid rgba(0,255,224,.14);
+      border-radius: 6px;
+      background: rgba(3,10,14,.58);
+      box-shadow: 0 14px 44px rgba(0,0,0,.24), inset 0 0 0 1px rgba(255,255,255,.03);
+      backdrop-filter: blur(10px);
       animation: panelWake .45s .12s cubic-bezier(.16,1,.3,1) both;
     }
     .weapon-slot {
-      min-height: 48px;
+      min-height: 42px;
       display: grid;
       grid-template-columns: auto 1fr auto;
       align-items: center;
@@ -213,7 +253,7 @@
       transition: all 0.15s;
       padding: 8px 10px;
       border: 1px solid rgba(255,255,255,.08);
-      border-radius: 2px;
+      border-radius: 4px;
       background: rgba(0,0,0,.38);
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
     }
@@ -243,7 +283,7 @@
       position: static;
       display: flex;
       align-items: baseline;
-      gap: 10px;
+      gap: 8px;
       pointer-events: none;
       text-align: left;
     }
@@ -272,17 +312,17 @@
       position: static;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       pointer-events: none;
     }
     #tier-badge {
-      width: 36px;
-      height: 36px;
+      width: 28px;
+      height: 28px;
       border: 1px solid currentColor;
       display: grid;
       place-items: center;
       font-family: 'Orbitron', monospace;
-      font-size: 18px;
+      font-size: 14px;
       font-weight: 900;
       transform: rotate(45deg);
       animation: tierFloat 2.6s ease-in-out infinite;
@@ -291,14 +331,73 @@
     #tier-text { text-align: right; }
     #tier-name {
       font-family: 'Orbitron', monospace;
-      font-size: 12px;
-      letter-spacing: 3px;
+      font-size: 10px;
+      letter-spacing: 2px;
     }
     #tier-rating {
       margin-top: 3px;
       font-size: 10px;
       letter-spacing: 2px;
       opacity: .55;
+    }
+    #combat-navbar #health-bar {
+      position: static;
+      width: 132px;
+      animation: none;
+    }
+    #combat-navbar #health-label { display: none; }
+    #combat-navbar #health-track { height: 5px; }
+    #combat-navbar #health-num {
+      font-size: 16px;
+      margin-top: 3px;
+      line-height: 1;
+    }
+    #combat-navbar #ammo-display {
+      position: static;
+      display: grid;
+      grid-template-columns: auto auto;
+      align-items: end;
+      gap: 2px 6px;
+      min-width: 104px;
+      text-align: left;
+      animation: none;
+    }
+    #combat-navbar #ammo-current {
+      font-size: 24px;
+    }
+    #combat-navbar #ammo-max {
+      margin: 0 0 2px;
+      font-size: 11px;
+    }
+    #combat-navbar #ammo-mode {
+      grid-column: 1 / -1;
+      margin-top: 0;
+      font-size: 8px;
+      letter-spacing: 2px;
+    }
+    #combat-navbar #player-count {
+      font-size: 10px;
+      letter-spacing: 2px;
+    }
+    @media (max-width: 980px) {
+      #combat-navbar {
+        left: 10px;
+        right: 10px;
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .nav-left, .nav-center, .nav-right {
+        justify-self: stretch;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      #weapon-slots {
+        width: calc(100vw - 24px);
+        grid-template-columns: repeat(5, minmax(58px, 1fr));
+        bottom: 12px;
+      }
+      .slot-name { display: none; }
+      #tab-hint { display: none; }
     }
     #match-limit-wrap {
       margin: 0;
@@ -525,18 +624,41 @@
     <canvas id="scope-canvas" style="width:100%;height:100%;"></canvas>
   </div>
   <div id="combat-navbar">
-    <div class="nav-brand">VOID PROTOCOL</div>
-    <div class="nav-center">
-      <div id="my-nick-wrap">▶ <span id="my-nick">PLAYER</span></div>
-      <div id="match-panel">
+    <div class="nav-section nav-left">
+      <div class="nav-brand">VOID PROTOCOL</div>
+      <div class="nav-chip">
+        <div class="nav-stack">
+          <div class="nav-label">SQUAD</div>
+          <div id="player-count" class="nav-value">PLAYERS: 1</div>
+        </div>
+      </div>
+    </div>
+    <div class="nav-section nav-center">
+      <div class="nav-chip">
+        <div id="my-nick-wrap">▶ <span id="my-nick">PLAYER</span></div>
+      </div>
+      <div id="match-panel" class="nav-chip">
         <div id="match-goal">10 KILLS</div>
         <div id="match-kills">0/10</div>
         <div id="match-status">BASE</div>
       </div>
     </div>
-    <div class="nav-right">
-      <div id="player-count">PLAYERS: 1</div>
-      <div id="tier-panel">
+    <div class="nav-section nav-right">
+      <div class="nav-chip">
+        <div id="health-bar">
+          <div id="health-label">HEALTH</div>
+          <div id="health-track"><div id="health-fill"></div></div>
+          <div id="health-num">100</div>
+        </div>
+      </div>
+      <div class="nav-chip">
+        <div id="ammo-display">
+          <div id="ammo-current">30</div>
+          <div id="ammo-max">/ 30</div>
+          <div id="ammo-mode">[AUTO]</div>
+        </div>
+      </div>
+      <div id="tier-panel" class="nav-chip">
         <div id="tier-text">
           <div id="tier-name">아이언 V</div>
           <div id="tier-rating">0 RP</div>
@@ -547,19 +669,7 @@
   </div>
   <div id="killfeed"></div>
 
-  <div id="health-bar">
-    <div id="health-label">HEALTH</div>
-    <div id="health-track"><div id="health-fill"></div></div>
-    <div id="health-num">100</div>
-  </div>
-
   <div id="dash-cd">DASH READY</div>
-
-  <div id="ammo-display">
-    <div id="ammo-current">30</div>
-    <div id="ammo-max">/ 30</div>
-    <div id="ammo-mode">[AUTO]</div>
-  </div>
 
   <div id="reload-bar">
     <div id="reload-label">RELOADING</div>
