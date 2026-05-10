@@ -1,9 +1,13 @@
-// network.js - Firebase Realtime Database 멀티플레이어 (닉네임/픽셀/KD 포함)
+// network.js - Firebase Realtime Database 멀티플레이어 (보안 적용 버전)
 
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child } from 'firebase/database';
 
-// 💡 환경 변수를 사용하여 민감한 정보 보호 (GitHub 노출 방지)
+/**
+ * [보안 중요] 
+ * 1. GitHub Secrets에 VITE_FB_... 이름으로 저장했어야 합니다.
+ * 2. Vercel이나 Netlify 배포 시 해당 서비스 설정에서도 환경변수를 등록해야 합니다.
+ */
 const FIREBASE_CONFIG = {
   apiKey:            import.meta.env.VITE_FB_API_KEY,
   authDomain:        import.meta.env.VITE_FB_AUTH_DOMAIN,
@@ -14,6 +18,11 @@ const FIREBASE_CONFIG = {
   appId:             import.meta.env.VITE_FB_APP_ID,
   measurementId:     import.meta.env.VITE_FB_MEASUREMENT_ID
 };
+
+// 환경 변수 로드 확인용 (개발 시에만 확인)
+if (!FIREBASE_CONFIG.apiKey) {
+  console.warn("⚠️ Firebase 환경 변수를 찾을 수 없습니다. 설정(Environment Variables)을 확인하세요.");
+}
 
 const fireApp = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 
@@ -56,7 +65,7 @@ export class Network {
         if (info.ts && (Date.now() - info.ts > 3000)) continue;
         others[pid] = info;
       }
-      // 타겟이 리스폰했으면 추적 HP 리셋
+      
       if (!this._targetHp) this._targetHp = {};
       for (const [pid, info] of Object.entries(others)) {
         if (info.health_reset) {
@@ -100,7 +109,6 @@ export class Network {
   }
 
   sendHit(targetId, damage = 15) {
-    // 타겟 HP 추적 (로컬에서)
     if (!this._targetHp) this._targetHp = {};
     if (this._targetHp[targetId] === undefined) this._targetHp[targetId] = 100;
     this._targetHp[targetId] = Math.max(0, this._targetHp[targetId] - damage);
@@ -111,17 +119,14 @@ export class Network {
       ts:   Date.now()
     }).catch(() => {});
 
-    // HP가 0 이하면 킬로 판정
     if (this._targetHp[targetId] <= 0) {
-      this._targetHp[targetId] = 100; // 타겟 HP 리셋
+      this._targetHp[targetId] = 100; 
       this.confirmKill(targetId);
     }
   }
 
-  // 킬 확인: 타겟 HP가 0이 되면 킬 카운트 증가
   async confirmKill(targetId) {
     this.kills++;
-    // DB에 킬 저장
     set(ref(this.db, `users/${this.myId}/kills`), this.kills).catch(()=>{});
     if (this.onKill) this.onKill(targetId, this.kills, this.deaths);
   }
