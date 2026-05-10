@@ -145,20 +145,42 @@
       right: 32px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 6px;
       align-items: flex-end;
       pointer-events: none;
     }
     .weapon-slot {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-size: 10px;
       letter-spacing: 3px;
       opacity: 0.3;
-      transition: opacity 0.1s, color 0.1s;
+      transition: all 0.15s;
+      padding: 4px 10px 4px 8px;
+      border: 1px solid transparent;
+      border-radius: 2px;
     }
     .weapon-slot.active {
       opacity: 1;
       color: #00ffe0;
+      border-color: rgba(0,255,224,0.4);
+      background: rgba(0,255,224,0.07);
+      box-shadow: 0 0 12px rgba(0,255,224,0.1);
     }
+    .weapon-slot .slot-key {
+      font-family: 'Orbitron', monospace;
+      font-size: 9px;
+      opacity: 0.5;
+      min-width: 14px;
+    }
+    .weapon-slot.active .slot-key { opacity: 1; }
+    .weapon-icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+    .slot-name { font-size: 10px; letter-spacing: 2px; }
+    .slot-count { font-size: 9px; opacity: 0.6; }
   </style>
 </head>
 <body>
@@ -209,8 +231,17 @@
 
 <!-- 무기 슬롯 -->
 <div id="weapon-slots">
-  <div class="weapon-slot active" id="slot-1">[ 1 ] GUN</div>
-  <div class="weapon-slot"       id="slot-4">[ 4 ] GRENADE ×3</div>
+  <div class="weapon-slot active" id="slot-1">
+    <span class="slot-key">1</span>
+    <span class="weapon-icon">🔫</span>
+    <span class="slot-name">M4A1</span>
+  </div>
+  <div class="weapon-slot" id="slot-4">
+    <span class="slot-key">4</span>
+    <span class="weapon-icon">💣</span>
+    <span class="slot-name">GRENADE</span>
+    <span class="slot-count" id="grenade-count-ui">×3</span>
+  </div>
 </div>
 
 <!-- 스코어보드 -->
