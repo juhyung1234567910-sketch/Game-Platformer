@@ -437,6 +437,8 @@ player.onBandageUsed = () => {
   addKillfeed('🩹 붕대 사용 완료! +30 HP');
   updateHud();
 };
+
+network.onPlayersUpdate = (others) => {
   for (const pid of Object.keys(remoteMeshes)) {
     if (!others[pid]) renderer.removeRemotePlayer(pid, remoteMeshes);
   }
