@@ -158,7 +158,7 @@ function updateHud() {
 
   if (player.weaponSlot === 1) {
     ammoCurrentEl.textContent = player.ammo;
-    ammoMaxEl.textContent     = '/ ' + player.maxAmmo;
+    ammoMaxEl.textContent     = '/ ' + player.maxAmmo + '  [' + player.totalAmmo + ']';
     ammoMode.textContent      = '[' + player.fireMode + ']';
   } else if (player.weaponSlot === 4) {
     ammoCurrentEl.textContent = '💣 ' + player.grenadeCount;
@@ -293,6 +293,74 @@ function checkHit() {
   }
 }
 
+// ── 보급상자 ──
+const CRATE_POS = new THREE.Vector3(0, 2.2, 0);   // 스폰 근처 바닥 위
+const CRATE_INTERACT_DIST = 3.5;
+
+// 상자 메시
+const crateMat  = new THREE.MeshLambertMaterial({ color: 0x997733 });
+const crateGeo  = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+const crateMesh = new THREE.Mesh(crateGeo, crateMat);
+crateMesh.position.copy(CRATE_POS);
+crateMesh.castShadow = crateMesh.receiveShadow = true;
+renderer.scene.add(crateMesh);
+
+// 십자 표시 (위쪽 면에 빨간 십자)
+const crossMatV = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+const crossMatH = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+const crossV    = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.02, 0.55), crossMatV);
+const crossH    = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.02, 0.15), crossMatH);
+crossV.position.set(0, 0.62, 0);
+crossH.position.set(0, 0.62, 0);
+renderer.scene.add(crossV, crossH);
+crossV.position.copy(CRATE_POS); crossV.position.y += 0.62;
+crossH.position.copy(CRATE_POS); crossH.position.y += 0.62;
+
+// E 라벨 스프라이트 (플레이어 이름표와 동일 방식)
+function makeELabel() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 80;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.roundRect(0, 0, 256, 80, 10); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,220,0,0.85)';
+  ctx.lineWidth = 2;
+  ctx.roundRect(1, 1, 254, 78, 10); ctx.stroke();
+  ctx.fillStyle = '#ffdd00';
+  ctx.font = 'bold 28px "Share Tech Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('[ E ]  RESUPPLY', 128, 34);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '16px "Share Tech Mono", monospace';
+  ctx.fillText('Ammo + Grenades', 128, 62);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  const mat    = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(2.2, 0.7, 1);
+  sprite.renderOrder = 999;
+  sprite.visible = false;
+  return sprite;
+}
+
+const crateLabel = makeELabel();
+crateLabel.position.copy(CRATE_POS);
+crateLabel.position.y += 1.6;
+renderer.scene.add(crateLabel);
+
+// E키 상호작용
+window.addEventListener('keydown', e => {
+  if (e.code !== 'KeyE') return;
+  if (player.pos.distanceTo(CRATE_POS) <= CRATE_INTERACT_DIST) {
+    player.refillFromCrate();
+    addKillfeed('📦 보급 완료! 탄약 + 수류탄 리필');
+    // 상자 깜빡 피드백
+    crateMesh.material.color.set(0x00ff88);
+    setTimeout(() => crateMesh.material.color.set(0x997733), 300);
+  }
+});
+
 // ── 콜백 연결 ──
 player.onShoot     = () => {};
 player.onHudUpdate = updateHud;
@@ -379,6 +447,12 @@ function loop() {
 
     renderer.updateParticles(dt);
     network.sendUpdate(player.getSnapshot(camCtrl));
+
+    // 보급상자 라벨: 가까이 있을 때만 표시, 카메라를 향하도록 (Sprite 자동 빌보드)
+    const crateDist = player.pos.distanceTo(CRATE_POS);
+    crateLabel.visible = crateDist <= CRATE_INTERACT_DIST;
+    // 상자 천천히 회전
+    crateMesh.rotation.y += 0.008;
 
     // ── 수류탄 충전바 / 슬롯 UI ──
     if (player.weaponSlot === 4 && player.isChargingGrenade) {
