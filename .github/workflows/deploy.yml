@@ -1,8 +1,9 @@
+# .github/workflows/deploy.yml
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ] # 메인 브랜치에 코드가 올라갈 때마다 실행
+    branches: [ main ]
 
 jobs:
   build-and-deploy:
@@ -16,11 +17,11 @@ jobs:
           npm install
           npm run build
         env:
-          # 여기서 GitHub Secrets와 Vite를 연결합니다!
+          # 💡 핵심: GitHub Secrets의 값을 Vite가 인식할 수 있는 환경 변수로 변환
           VITE_FB_API_KEY: ${{ secrets.VITE_FB_API_KEY }}
-          VITE_FB_AUTH_DOMAIN: ${{ secrets.VITE_FB_AUTH_DOMAIN }}
           VITE_FB_DATABASE_URL: ${{ secrets.VITE_FB_DATABASE_URL }}
           VITE_FB_PROJECT_ID: ${{ secrets.VITE_FB_PROJECT_ID }}
+          VITE_FB_AUTH_DOMAIN: ${{ secrets.VITE_FB_AUTH_DOMAIN }}
           VITE_FB_STORAGE_BUCKET: ${{ secrets.VITE_FB_STORAGE_BUCKET }}
           VITE_FB_MESSAGING_SENDER_ID: ${{ secrets.VITE_FB_MESSAGING_SENDER_ID }}
           VITE_FB_APP_ID: ${{ secrets.VITE_FB_APP_ID }}
@@ -29,5 +30,5 @@ jobs:
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist # Vite의 빌드 결과물 폴더
-          branch: gh-pages # 배포용 브랜치
+          folder: dist
+          branch: gh-pages
