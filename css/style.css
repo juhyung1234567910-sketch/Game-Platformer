@@ -316,3 +316,26 @@ body {
   z-index: 20;
   background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
 }
+
+#bandage-bar {
+  position: absolute;
+  bottom: 160px; left: 50%;
+  transform: translateX(-50%);
+  width: 200px;
+  display: none;
+}
+#bandage-bar.visible { display: block; }
+#bandage-label {
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 4px;
+  color: #00ee88;
+  margin-bottom: 6px;
+  animation: blink 0.6s ease infinite alternate;
+}
+#bandage-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #00aa55, #00ee88);
+  transition: width 0.05s linear;
+}
