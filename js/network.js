@@ -1,171 +1,35 @@
-// network.js - Firebase Realtime Database 멀티플레이어 (보안 적용 버전)
+name: Deploy to GitHub Pages
+on:
+  push:
+    branches: [ main ]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child } from 'firebase/database';
+      - name: Inject Secrets
+        run: |
+          TARGET="js/network.js"
+          if [ ! -f "$TARGET" ]; then
+            echo "❌ $TARGET 파일 없음"
+            ls -R
+            exit 1
+          fi
+          sed -i "s|__VITE_FB_API_KEY__|${{ secrets.VITE_FB_API_KEY }}|g" $TARGET
+          sed -i "s|__VITE_FB_AUTH_DOMAIN__|${{ secrets.VITE_FB_AUTH_DOMAIN }}|g" $TARGET
+          sed -i "s|__VITE_FB_DATABASE_URL__|${{ secrets.VITE_FB_DATABASE_URL }}|g" $TARGET
+          sed -i "s|__VITE_FB_PROJECT_ID__|${{ secrets.VITE_FB_PROJECT_ID }}|g" $TARGET
+          sed -i "s|__VITE_FB_STORAGE_BUCKET__|${{ secrets.VITE_FB_STORAGE_BUCKET }}|g" $TARGET
+          sed -i "s|__VITE_FB_MESSAGING_SENDER_ID__|${{ secrets.VITE_FB_MESSAGING_SENDER_ID }}|g" $TARGET
+          sed -i "s|__VITE_FB_APP_ID__|${{ secrets.VITE_FB_APP_ID }}|g" $TARGET
+          sed -i "s|__VITE_FB_MEASUREMENT_ID__|${{ secrets.VITE_FB_MEASUREMENT_ID }}|g" $TARGET
+          echo "✅ 치환 완료"
+          grep "databaseURL" $TARGET  # 확인용
 
-/**
- * [보안 중요] 
- * 1. GitHub Secrets에 VITE_FB_... 이름으로 저장했어야 합니다.
- * 2. Vercel이나 Netlify 배포 시 해당 서비스 설정에서도 환경변수를 등록해야 합니다.
- */
-// network.js 12번째 줄 근처 수정
-// 12번째 줄: ?(Optional Chaining)를 붙여서 에러 방지
-// js/network.js
-
-// 💡 중요: 아래 문자열들은 GitHub Actions의 sed 명령어가 찾아낼 '표식'입니다.
-// 절대 임의로 수정하지 마세요!
-export const FIREBASE_CONFIG = {
-  apiKey:            "__VITE_FB_API_KEY__",
-  authDomain:        "__VITE_FB_AUTH_DOMAIN__",
-  databaseURL:       "__VITE_FB_DATABASE_URL__",
-  projectId:         "__VITE_FB_PROJECT_ID__",
-  storageBucket:     "__VITE_FB_STORAGE_BUCKET__",
-  messagingSenderId: "__VITE_FB_MESSAGING_SENDER_ID__",
-  appId:             "__VITE_FB_APP_ID__",
-  measurementId:     "__VITE_FB_MEASUREMENT_ID__"
-};
-
-// 확인용 로그 (배포 후 브라우저 콘솔에서 확인 가능)
-console.log("Firebase 주소 확인:", FIREBASE_CONFIG.databaseURL);
-
-
-// 환경 변수 로드 확인용 (개발 시에만 확인)
-if (!FIREBASE_CONFIG.apiKey) {
-  console.warn("⚠️ Firebase 환경 변수를 찾을 수 없습니다. 설정(Environment Variables)을 확인하세요.");
-}
-
-const fireApp = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
-
-export class Network {
-  constructor(userInfo) {
-    this.db       = getDatabase(fireApp);
-    this.myId     = userInfo.nickname;          // 닉네임을 ID로 사용
-    this.nickname = userInfo.nickname;
-    this.pixels   = userInfo.pixels;
-
-    this.otherPlayers = {};
-    this.myHealth     = 100;
-
-    // 킬뎃
-    this.kills  = userInfo.kills  || 0;
-    this.deaths = userInfo.deaths || 0;
-
-    // 리스폰 무적
-    this._respawnTime        = Date.now();
-    this._invincibleDuration = 3000;
-
-    this.onPlayersUpdate = null;
-    this.onHealthUpdate  = null;
-    this.onHit           = null;
-    this.onKill          = null;   // 킬 발생 시 콜백
-
-    this._lastSend    = 0;
-    this._sendInterval = 50;
-
-    this._setupListeners();
-  }
-
-  _setupListeners() {
-    // 전체 플레이어 구독
-    onValue(ref(this.db, 'players'), snapshot => {
-      const data = snapshot.val() || {};
-      const others = {};
-      for (const [pid, info] of Object.entries(data)) {
-        if (pid === this.myId) continue;
-        if (info.ts && (Date.now() - info.ts > 3000)) continue;
-        others[pid] = info;
-      }
-      
-      if (!this._targetHp) this._targetHp = {};
-      for (const [pid, info] of Object.entries(others)) {
-        if (info.health_reset) {
-          this._targetHp[pid] = 100;
-        }
-      }
-      this.otherPlayers = others;
-      if (this.onPlayersUpdate) this.onPlayersUpdate(others);
-    });
-
-    // 피격 이벤트
-    const hitRef = ref(this.db, `hits/${this.myId}`);
-    onValue(hitRef, snapshot => {
-      const data = snapshot.val();
-      if (!data) return;
-      const hitTs = data.ts || 0;
-      if (hitTs < this._respawnTime) { remove(hitRef); return; }
-      if (Date.now() - this._respawnTime < this._invincibleDuration) { remove(hitRef); return; }
-
-      this.myHealth = Math.max(0, this.myHealth - (data.damage || 15));
-      if (this.onHealthUpdate) this.onHealthUpdate(this.myHealth);
-      if (this.onHit) this.onHit(data.damage || 15);
-      remove(hitRef);
-    });
-
-    onDisconnect(ref(this.db, `players/${this.myId}`)).remove();
-  }
-
-  sendUpdate(snapshot) {
-    const now = Date.now();
-    if (now - this._lastSend < this._sendInterval) return;
-    this._lastSend = now;
-    set(ref(this.db, `players/${this.myId}`), {
-      ...snapshot,
-      nickname: this.nickname,
-      pixels:   this.pixels,
-      kills:    this.kills,
-      deaths:   this.deaths,
-      ts:       now,
-    }).catch(() => {});
-  }
-
-  sendHit(targetId, damage = 15) {
-    if (!this._targetHp) this._targetHp = {};
-    if (this._targetHp[targetId] === undefined) this._targetHp[targetId] = 100;
-    this._targetHp[targetId] = Math.max(0, this._targetHp[targetId] - damage);
-
-    set(ref(this.db, `hits/${targetId}`), {
-      damage,
-      from: this.myId,
-      ts:   Date.now()
-    }).catch(() => {});
-
-    if (this._targetHp[targetId] <= 0) {
-      this._targetHp[targetId] = 100; 
-      this.confirmKill(targetId);
-    }
-  }
-
-  async confirmKill(targetId) {
-    this.kills++;
-    set(ref(this.db, `users/${this.myId}/kills`), this.kills).catch(()=>{});
-    if (this.onKill) this.onKill(targetId, this.kills, this.deaths);
-  }
-
-  sendRespawn(posArr) {
-    const now = Date.now();
-    this.myHealth     = 100;
-    this._respawnTime = now;
-    this.deaths++;
-    set(ref(this.db, `users/${this.myId}/deaths`), this.deaths).catch(()=>{});
-    remove(ref(this.db, `hits/${this.myId}`)).catch(() => {});
-    set(ref(this.db, `players/${this.myId}`), {
-      pos:          posArr,
-      nickname:     this.nickname,
-      pixels:       this.pixels,
-      health_reset: true,
-      ts:           now
-    }).catch(() => {});
-  }
-
-  disconnect() {
-    remove(ref(this.db, `players/${this.myId}`)).catch(() => {});
-  }
-
-  isInvincible() {
-    return (Date.now() - this._respawnTime) < this._invincibleDuration;
-  }
-
-  getPlayerCount() {
-    return Object.keys(this.otherPlayers).length + 1;
-  }
-}
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: .
+          branch: gh-pages
