@@ -11,23 +11,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Replace Secrets
-        # node 명령어를 사용해 network.js 파일 내부의 텍스트를 확실하게 교체합니다.
+      - name: Inject Secrets
         run: |
-          node -e "
-          const fs = require('fs');
-          const file = 'network.js'; // 만약 src 폴더 안에 있다면 'src/network.js'로 수정!
-          let content = fs.readFileSync(file, 'utf8');
-          content = content.replace('__VITE_FB_API_KEY__', '${{ secrets.VITE_FB_API_KEY }}');
-          content = content.replace('__VITE_FB_AUTH_DOMAIN__', '${{ secrets.VITE_FB_AUTH_DOMAIN }}');
-          content = content.replace('__VITE_FB_DATABASE_URL__', '${{ secrets.VITE_FB_DATABASE_URL }}');
-          content = content.replace('__VITE_FB_PROJECT_ID__', '${{ secrets.VITE_FB_PROJECT_ID }}');
-          content = content.replace('__VITE_FB_STORAGE_BUCKET__', '${{ secrets.VITE_FB_STORAGE_BUCKET }}');
-          content = content.replace('__VITE_FB_MESSAGING_SENDER_ID__', '${{ secrets.VITE_FB_MESSAGING_SENDER_ID }}');
-          content = content.replace('__VITE_FB_APP_ID__', '${{ secrets.VITE_FB_APP_ID }}');
-          content = content.replace('__VITE_FB_MEASUREMENT_ID__', '${{ secrets.VITE_FB_MEASUREMENT_ID }}');
-          fs.writeFileSync(file, content);
-          "
+          # 1. 수정할 파일 경로 설정 (파일 위치에 따라 수정하세요!)
+          target_file="js/network.js" 
+          
+          # 2. 파일 내용 치환 (sed 사용)
+          # GitHub Secrets에서 값을 가져와 실제 파일의 텍스트를 바꿉니다.
+          sed -i "s|__VITE_FB_API_KEY__|${{ secrets.VITE_FB_API_KEY }}|g" $target_file
+          sed -i "s|__VITE_FB_AUTH_DOMAIN__|${{ secrets.VITE_FB_AUTH_DOMAIN }}|g" $target_file
+          sed -i "s|__VITE_FB_DATABASE_URL__|${{ secrets.VITE_FB_DATABASE_URL }}|g" $target_file
+          sed -i "s|__VITE_FB_PROJECT_ID__|${{ secrets.VITE_FB_PROJECT_ID }}|g" $target_file
+          sed -i "s|__VITE_FB_STORAGE_BUCKET__|${{ secrets.VITE_FB_STORAGE_BUCKET }}|g" $target_file
+          sed -i "s|__VITE_FB_MESSAGING_SENDER_ID__|${{ secrets.VITE_FB_MESSAGING_SENDER_ID }}|g" $target_file
+          sed -i "s|__VITE_FB_APP_ID__|${{ secrets.VITE_FB_APP_ID }}|g" $target_file
+          sed -i "s|__VITE_FB_MEASUREMENT_ID__|${{ secrets.VITE_FB_MEASUREMENT_ID }}|g" $target_file
+          
+          echo "치환 완료: $target_file"
 
       - name: Install and Build
         run: |
