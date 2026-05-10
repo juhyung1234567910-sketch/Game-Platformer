@@ -223,10 +223,50 @@ function rayVsCapsule(origin, front, center, halfH, radius) {
   return t;
 }
 
+// 레이 vs AABB 박스 교차 거리 반환 (교차 없으면 Infinity)
+function rayVsBox(origin, front, box) {
+  const [bx, by, bz] = box.pos;
+  const [sx, sy, sz] = box.size;
+  const minX = bx - sx, maxX = bx + sx;
+  const minY = by - sy, maxY = by + sy;
+  const minZ = bz - sz, maxZ = bz + sz;
+
+  const invDx = front.x !== 0 ? 1 / front.x : Infinity;
+  const invDy = front.y !== 0 ? 1 / front.y : Infinity;
+  const invDz = front.z !== 0 ? 1 / front.z : Infinity;
+
+  const tMinX = (minX - origin.x) * invDx;
+  const tMaxX = (maxX - origin.x) * invDx;
+  const tMinY = (minY - origin.y) * invDy;
+  const tMaxY = (maxY - origin.y) * invDy;
+  const tMinZ = (minZ - origin.z) * invDz;
+  const tMaxZ = (maxZ - origin.z) * invDz;
+
+  const tEnter = Math.max(Math.min(tMinX, tMaxX), Math.min(tMinY, tMaxY), Math.min(tMinZ, tMaxZ));
+  const tExit  = Math.min(Math.max(tMinX, tMaxX), Math.max(tMinY, tMaxY), Math.max(tMinZ, tMaxZ));
+
+  if (tExit < 0 || tEnter > tExit) return Infinity;
+  return tEnter > 0 ? tEnter : tExit;
+}
+
+// 레이가 맵 벽에 가로막히는지 검사 - 가장 가까운 벽 거리 반환
+function wallBlockDist(origin, front) {
+  const boxes = player.boxes;
+  let minDist = Infinity;
+  for (const b of boxes) {
+    const d = rayVsBox(origin, front, b);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
+}
+
 function checkHit() {
   const origin = camCtrl.getHeadPos();
   const front  = camCtrl.getFront();
   let bestDist=200, hitTarget=null, hitDamage=0, hitPart='';
+
+  // 벽까지의 거리 — 이보다 멀리 있는 플레이어는 맞지 않음
+  const wallDist = wallBlockDist(origin, front);
 
   for (const [pid, info] of Object.entries(network.otherPlayers)) {
     if (!info?.pos) continue;
@@ -234,7 +274,7 @@ function checkHit() {
     for (const hb of HITBOXES) {
       const center = base.clone(); center.y += hb.offsetY;
       const t = rayVsCapsule(origin, front, center, hb.halfH, hb.radius);
-      if (t < bestDist) {
+      if (t < bestDist && t < wallDist) {   // 벽보다 가까울 때만 히트
         bestDist = t; hitTarget = pid;
         hitDamage = hb.damage; hitPart = hb.name;
       }
