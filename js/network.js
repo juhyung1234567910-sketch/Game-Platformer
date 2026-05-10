@@ -8,15 +8,17 @@ import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child } from
  * 1. GitHub Secrets에 VITE_FB_... 이름으로 저장했어야 합니다.
  * 2. Vercel이나 Netlify 배포 시 해당 서비스 설정에서도 환경변수를 등록해야 합니다.
  */
+// network.js 12번째 줄 근처 수정
 const FIREBASE_CONFIG = {
-  apiKey:            import.meta.env.VITE_FB_API_KEY,
-  authDomain:        import.meta.env.VITE_FB_AUTH_DOMAIN,
-  databaseURL:       import.meta.env.VITE_FB_DATABASE_URL,
-  projectId:         import.meta.env.VITE_FB_PROJECT_ID,
-  storageBucket:     import.meta.env.VITE_FB_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FB_MESSAGING_SENDER_ID,
-  appId:             import.meta.env.VITE_FB_APP_ID,
-  measurementId:     import.meta.env.VITE_FB_MEASUREMENT_ID
+  // import.meta.env가 없어도 에러가 나지 않도록 ?. 연산자 사용
+  apiKey:            import.meta.env?.VITE_FB_API_KEY,
+  authDomain:        import.meta.env?.VITE_FB_AUTH_DOMAIN,
+  databaseURL:       import.meta.env?.VITE_FB_DATABASE_URL,
+  projectId:         import.meta.env?.VITE_FB_PROJECT_ID,
+  storageBucket:     import.meta.env?.VITE_FB_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env?.VITE_FB_MESSAGING_SENDER_ID,
+  appId:             import.meta.env?.VITE_FB_APP_ID,
+  measurementId:     import.meta.env?.VITE_FB_MEASUREMENT_ID
 };
 
 // 환경 변수 로드 확인용 (개발 시에만 확인)
