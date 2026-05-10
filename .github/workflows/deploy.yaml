@@ -2,6 +2,10 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [ main ]
+
+permissions:
+  contents: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -26,9 +30,8 @@ jobs:
           echo "== 치환 결과 확인 =="
           grep "databaseURL\|apiKey" "$TARGET"
 
-          # 플레이스홀더가 남아있으면 배포 중단
           if grep -q "__VITE_FB_" "$TARGET"; then
-            echo "❌ 오류: 치환되지 않은 플레이스홀더가 남아있습니다. Repository Secrets를 확인하세요."
+            echo "❌ 치환되지 않은 플레이스홀더가 남아있습니다. Repository Secrets를 확인하세요."
             exit 1
           fi
           echo "✅ 모든 환경 변수 주입 완료"
@@ -38,3 +41,4 @@ jobs:
         with:
           folder: .
           branch: gh-pages
+          token: ${{ secrets.GITHUB_TOKEN }}
