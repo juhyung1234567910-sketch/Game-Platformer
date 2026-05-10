@@ -16,7 +16,7 @@ console.log("체크 - DB 주소:", import.meta.env?.VITE_FB_DATABASE_URL || "값
 const FIREBASE_CONFIG = {
   apiKey:            "__VITE_FB_API_KEY__",
   authDomain:        "__VITE_FB_AUTH_DOMAIN__",
-  databaseURL:       "__VITE_FB_DATABASE_URL__",
+  databaseURL:       "__VITE_FB_DATABASE_URL__", // <-- 이게 안 바뀌어서 에러가 난 겁니다.
   projectId:         "__VITE_FB_PROJECT_ID__",
   storageBucket:     "__VITE_FB_STORAGE_BUCKET__",
   messagingSenderId: "__VITE_FB_MESSAGING_SENDER_ID__",
