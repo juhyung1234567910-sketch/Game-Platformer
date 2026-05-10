@@ -69,6 +69,9 @@ const loadoutGridEl     = document.getElementById('loadout-grid');
 const loadoutSlotsEl    = document.getElementById('loadout-slots');
 const fpsDisplayEl      = document.getElementById('fps-display');
 const pingDisplayEl     = document.getElementById('ping-display');
+const chatMessagesEl    = document.getElementById('chat-messages');
+const chatInputWrapEl   = document.getElementById('chat-input-wrap');
+const chatInputEl       = document.getElementById('chat-input');
 
 // FPS / Ping 측정
 let _fpsFrames = 0, _fpsAccum = 0, _fpsValue = 0;
@@ -665,6 +668,75 @@ network.onKill = (targetId, kills, deaths) => {
   updateHud();
 };
 
+// ── 채팅 ──
+const _seenChatTs = new Set();
+
+function addChatMessage({ uid, nickname, text, ts }) {
+  // 중복 방지
+  const key = `${uid}_${ts}`;
+  if (_seenChatTs.has(key)) return;
+  _seenChatTs.add(key);
+
+  const isMe = uid === network.myUid;
+  const div = document.createElement('div');
+  div.className = 'chat-msg' + (isMe ? ' chat-mine' : '');
+  div.innerHTML = `<span class="chat-nick">${escapeHtml(nickname)}</span>${escapeHtml(text)}`;
+  chatMessagesEl.appendChild(div);
+
+  // 최대 30개 유지
+  while (chatMessagesEl.children.length > 30) {
+    chatMessagesEl.removeChild(chatMessagesEl.firstChild);
+  }
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+
+  // 8초 후 자동 제거
+  setTimeout(() => div.remove(), 8000);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+let _chatOpen = false;
+
+function openChat() {
+  _chatOpen = true;
+  chatInputWrapEl.classList.add('active');
+  document.exitPointerLock?.();
+  setTimeout(() => chatInputEl.focus(), 30);
+}
+
+function closeChat() {
+  _chatOpen = false;
+  chatInputWrapEl.classList.remove('active');
+  chatInputEl.value = '';
+}
+
+function submitChat() {
+  const text = chatInputEl.value.trim();
+  if (text) network.sendChat(text);
+  closeChat();
+}
+
+// T키로 채팅 열기
+window.addEventListener('keydown', e => {
+  if (_chatOpen) return;
+  if (e.code === 'KeyT' && !e.repeat) {
+    e.preventDefault();
+    openChat();
+  }
+});
+
+// 채팅창 키 처리
+chatInputEl.addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.code === 'Enter') { e.preventDefault(); submitChat(); }
+  if (e.code === 'Escape') { e.preventDefault(); closeChat(); }
+});
+
+// 채팅 수신 시작
+network.listenChat(addChatMessage);
+
 // ── 메인 루프 ──
 function loop() {
   requestAnimationFrame(loop);
@@ -804,7 +876,7 @@ function loop() {
   }
 
   renderer.render(renderer.camera);
-
+}
 
 updateHud();
 playerCountEl.textContent = 'PLAYERS: 1';
