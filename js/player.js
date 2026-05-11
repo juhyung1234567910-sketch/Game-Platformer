@@ -1,4 +1,4 @@
-// player.js - 플레이어 물리/입력/무기 + OBJ 총모델 (m4a1.obj)
+// player.js - Player physics/input/weapon + OBJ gun model (m4a1.obj)
 
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -20,14 +20,14 @@ export class Player {
     this.speedBoost = 0;
     this.padCooldown = 0;
 
-    // 슬라이드/대시
+    // Slide/dash
     this.isSliding       = false;
     this.slideSpeed      = 0;
     this.slideDir        = new THREE.Vector3();
     this.dashCooldown    = 0;
     this.dashCooldownMax = 10;
 
-    // 애니메이션
+    // Animation
     this.moveTime    = 0;
     this.bobAmp      = 0;
     this.targetRoll  = 0;
@@ -36,10 +36,10 @@ export class Player {
     this.recoilYaw   = 0;
     this.recoilPitch = 0;
 
-    // 무기
+    // Weapon
     this.ammo          = 30;
     this.maxAmmo       = 30;
-    this.totalAmmo     = 120;   // 총 예비 탄약
+    this.totalAmmo     = 120;   // Total reserve ammo
     this.maxTotalAmmo  = 120;
     this.isReloading   = false;
     this.reloadTimer   = 0;
@@ -67,19 +67,19 @@ export class Player {
     this.mKeyHeld      = false;
     this.mouseLeftHeld = false;
 
-    // 체력
+    // Health
     this.health    = 100;
     this.maxHealth = 100;
 
     this.boxes    = boxes;
     this.renderer = renderer;
 
-    // 무기 슬롯: 1=M4A1, 2=저격총, 5=권총, 4=수류탄
+    // Weapon slot: 1=M4A1, 2=Sniper, 5=Pistol, 4=Grenade
     this.weaponSlot    = 1;
-    this.grenadeCount  = 3;        // 수류탄 재고
-    this.maxGrenades   = 3;        // 수류탄 최대치
+    this.grenadeCount  = 3;        // Grenade stock
+    this.maxGrenades   = 3;        // Max grenades
 
-    // ── 저격총 ──
+    // ── Sniper ──
     this.sniperAmmo       = 5;
     this.sniperMaxAmmo    = 5;
     this.sniperTotalAmmo  = 20;
@@ -89,31 +89,31 @@ export class Player {
     this.sniperReloadDur  = 120;
     this.isScopedIn       = false;
     this.scopeProgress    = 0;
-    this.sniperFireCd     = 0;     // 발사 후 쿨타임
-    this.sniperFireRate   = 15;    // 15프레임 쿨타임
+    this.sniperFireCd     = 0;     // Fire cooldown
+    this.sniperFireRate   = 15;    // 15 frame cooldown
     this._slot2Held       = false;
 
-    // ── 권총 ──
+    // ── Pistol ──
     this.pistolAmmo       = 12;
     this.pistolMaxAmmo    = 12;
     this.pistolTotalAmmo  = 48;
     this.pistolMaxTotal   = 48;
     this.pistolReloading  = false;
     this.pistolReloadTimer = 0;
-    this.pistolReloadDur  = 70;    // ~1.2초
+    this.pistolReloadDur  = 70;    // ~1.2s
     this.pistolFireCd     = 0;
-    this.pistolFireRate   = 15;    // 반자동 쿨다운
+    this.pistolFireRate   = 15;    // Semi-auto cooldown
     this._slot5Held       = false;
     this._spaceHeld       = false;
 
-    // 붕대
-    this.bandageCount    = 0;      // 현재 소지 (최대 1)
+    // Bandage
+    this.bandageCount    = 0;      // Current stock (max 1)
     this.maxBandage      = 1;
     this.isBandaging     = false;
     this.bandageTimer    = 0;
-    this.bandageDuration = 90;     // 1.5초 (60fps 기준)
-    this.grenadeCharge = 0;        // 좌클릭 홀드 시간 (0~60프레임)
-    this.grenadeMaxCharge = 90;    // 최대 충전 프레임
+    this.bandageDuration = 90;     // 1.5s (at 60fps base)
+    this.grenadeCharge = 0;        // Left-click hold time (0~90 frames)
+    this.grenadeMaxCharge = 90;    // Max charge frames
     this.isChargingGrenade = false;
     this._slot4Held   = false;
     this._slot1Held   = false;
@@ -122,40 +122,40 @@ export class Player {
     this._slot2Held   = false;
     this._slot5Held   = false;
 
-    // 수류탄 시스템 (renderer.scene 필요하므로 나중에 init)
+    // Grenade system (requires renderer.scene, init later)
     this.grenadeSystem = null;
 
-    // 입력
+    // Input
     this.keys  = {};
     this.mouse = { left: false, right: false };
     this._bindInput();
 
-    // 콜백
+    // Callbacks
     this.onShoot      = null;
     this.onHudUpdate  = null;
     this.onDie        = null;
     this.onBandageUsed = null;
 
-    // OBJ 로드 완료 후 채워질 메시 (그 전까진 null)
-    this._gunMesh1P   = null;   // 1인칭 weaponScene용
-    this._gunMesh3P   = null;   // 3인칭 bodyGroup용
+    // Mesh filled after OBJ load (null until then)
+    this._gunMesh1P   = null;   // 1P weaponScene
+    this._gunMesh3P   = null;   // 3P bodyGroup
     this._gunLoaded   = false;
 
-    // 3인칭 바디 먼저 빌드 (총은 OBJ 로드 후 삽입)
+    // Build 3P body first (gun inserted after OBJ load)
     this._buildLocalBody(renderer);
 
-    // 1인칭 무기 그룹 (OBJ 로드 후 메시 추가)
+    // 1P weapon group (mesh added after OBJ load)
     this._fpWeaponGroup = new THREE.Group();
     this._fpWeaponGroup.position.set(0.25, -0.85, -0.15);
     renderer.weaponScene.add(this._fpWeaponGroup);
 
-    // 1인칭 수류탄 그룹
+    // 1P grenade group
     this._fpGrenadeGroup = new THREE.Group();
     this._fpGrenadeGroup.visible = false;
     const gGeo = new THREE.SphereGeometry(0.07, 8, 8);
     const gMat = new THREE.MeshLambertMaterial({ color: 0x2d4a1e });
     const gMesh = new THREE.Mesh(gGeo, gMat);
-    // 핀
+    // Pin
     const pinGeo = new THREE.CylinderGeometry(0.005, 0.005, 0.06, 6);
     const pinMat = new THREE.MeshLambertMaterial({ color: 0xdddddd });
     const pin = new THREE.Mesh(pinGeo, pinMat);
@@ -165,7 +165,7 @@ export class Player {
     this._fpGrenadeGroup.position.set(0.18, -0.80, -0.40);
     renderer.weaponScene.add(this._fpGrenadeGroup);
 
-    // ── 1인칭 저격총 그룹 (간단 박스 모델) ──
+    // ── 1P sniper group (simple box model) ──
     this._fpSniperGroup = new THREE.Group();
     this._fpSniperGroup.visible = false;
     const sMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
@@ -182,7 +182,7 @@ export class Player {
     this._fpSniperGroup.position.set(0.22, -0.78, -0.55);
     renderer.weaponScene.add(this._fpSniperGroup);
 
-    // ── 1인칭 권총 그룹 ──
+    // ── 1P pistol group ──
     this._fpPistolGroup = new THREE.Group();
     this._fpPistolGroup.visible = false;
     const pMat3 = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
@@ -195,15 +195,15 @@ export class Player {
     this._fpPistolGroup.position.set(0.20, -0.75, -0.45);
     renderer.weaponScene.add(this._fpPistolGroup);
 
-    // OBJ 비동기 로드
+    // OBJ async load
     this._loadGun(renderer);
 
-    // 수류탄 시스템 초기화
+    // Grenade system init
     this.grenadeSystem = new GrenadeSystem(renderer.scene, boxes);
   }
 
   // ─────────────────────────────────────────
-  // OBJ 로드
+  // OBJ load
   // ─────────────────────────────────────────
   _loadGun(renderer) {
     const loader  = new OBJLoader();
@@ -213,9 +213,9 @@ export class Player {
     });
 
     loader.load(
-      './m4a1.obj',          // index.html 기준 경로
+      './m4a1.obj',          // Path relative to index.html
       (obj) => {
-        // 전체 머티리얼 통일 + 그림자
+        // Unified material + shadow
         obj.traverse(child => {
           if (child.isMesh) {
             child.material  = gunMat.clone();
@@ -223,7 +223,7 @@ export class Player {
           }
         });
 
-        // ── OBJ 크기 측정 후 정규화 ──
+        // ── Measure OBJ size then normalize ──
         const box3 = new THREE.Box3().setFromObject(obj);
         const size = new THREE.Vector3();
         box3.getSize(size);
@@ -231,18 +231,18 @@ export class Player {
         box3.getCenter(center);
         const maxDim = Math.max(size.x, size.y, size.z);
 
-        // ── 1인칭 총 ──
-        // 0.65 유닛 크기로 (원본보다 크게)
+        // ── 1P gun ──
+        // 0.65 unit size (larger than original)
         const scale = 0.65 / maxDim;
         const gun1P = obj.clone(true);
         gun1P.scale.setScalar(scale);
-        // 중심을 원점으로 + 총구를 앞(-Z)으로 향하게 Y축 180도
+        // Center to origin + rotate 180° Y so muzzle faces -Z
         gun1P.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
         gun1P.rotation.set(0, Math.PI, 0);
         this._fpWeaponGroup.add(gun1P);
         this._gunMesh1P = gun1P;
 
-        // ── 3인칭 총 ──
+        // ── 3P gun ──
         const scale3P = 0.45 / maxDim;
         const gun3P = obj.clone(true);
         gun3P.scale.setScalar(scale3P);
@@ -252,20 +252,20 @@ export class Player {
         this._gunMesh3P = gun3P;
 
         this._gunLoaded = true;
-        console.log('[✅] m4a1.obj 로드 완료, scale=', scale.toFixed(4));
+        console.log('[OK] m4a1.obj loaded, scale=', scale.toFixed(4));
       },
       (xhr) => {
         if (xhr.total) console.log(`[🔃] m4a1.obj ${(xhr.loaded/xhr.total*100).toFixed(0)}%`);
       },
       (err) => {
-        console.warn('[⚠️] m4a1.obj 로드 실패, 박스 대체 사용:', err);
-        // 폴백: 박스로 대체
+        console.warn('[WARN] m4a1.obj load failed, using box fallback:', err);
+        // Fallback: replace with box
         this._buildFallbackGun(renderer);
       }
     );
   }
 
-  // OBJ 로드 실패 시 박스 대체 총
+  // Box fallback gun when OBJ load fails
   _buildFallbackGun(renderer) {
     const gMat = new THREE.MeshLambertMaterial({ color: 0x222222, map: renderer.getTexWeapon() });
     const g1 = new THREE.Group();
@@ -284,7 +284,7 @@ export class Player {
   }
 
   // ─────────────────────────────────────────
-  // 로컬 3인칭 바디
+  // Local 3P body
   // ─────────────────────────────────────────
   _buildLocalBody(renderer) {
     const scene = renderer.scene;
@@ -294,60 +294,60 @@ export class Player {
     this.bodyGroup = new THREE.Group();
     this.bodyGroup.visible = false;
 
-    // 몸통
+    // Torso
     const body = new THREE.Mesh(box(0.4,0.6,0.25), pMat(0x3366aa));
     body.position.y = 1.0; body.castShadow = true;
     this.bodyGroup.add(body);
 
-    // 머리 pivot
+    // Head pivot
     this._headPivot = new THREE.Group();
     this._headPivot.position.y = 1.7;
     const head = new THREE.Mesh(box(0.25,0.25,0.25), pMat(0x4477bb));
     head.castShadow = true; this._headPivot.add(head);
     this.bodyGroup.add(this._headPivot);
 
-    // 왼다리
+    // Left leg
     this._legLPivot = new THREE.Group();
     this._legLPivot.position.set(-0.25, 1.0, 0);
     const legL = new THREE.Mesh(box(0.2,0.7,0.2), pMat(0x2255aa));
     legL.position.y = -0.7; legL.castShadow = true; this._legLPivot.add(legL);
     this.bodyGroup.add(this._legLPivot);
 
-    // 오른다리
+    // Right leg
     this._legRPivot = new THREE.Group();
     this._legRPivot.position.set(0.25, 1.0, 0);
     const legR = new THREE.Mesh(box(0.2,0.7,0.2), pMat(0x2255aa));
     legR.position.y = -0.7; legR.castShadow = true; this._legRPivot.add(legR);
     this.bodyGroup.add(this._legRPivot);
 
-    // 오른팔
+    // Right arm
     this._armRPivot = new THREE.Group();
     this._armRPivot.position.set(0.45, 1.4, 0.05);
     const armR = new THREE.Mesh(box(0.15,0.6,0.15), pMat(0x3366aa));
     armR.position.y = -0.6; armR.castShadow = true; this._armRPivot.add(armR);
     this.bodyGroup.add(this._armRPivot);
 
-    // 왼팔
+    // Left arm
     this._armLPivot = new THREE.Group();
     this._armLPivot.position.set(-0.45, 1.4, 0.05);
     const armL = new THREE.Mesh(box(0.15,0.7,0.15), pMat(0x3366aa));
     armL.position.y = -0.7; armL.castShadow = true; this._armLPivot.add(armL);
     this.bodyGroup.add(this._armLPivot);
 
-    // 총 그룹 (OBJ 로드 후 메시가 추가될 빈 그룹)
+    // Gun group (empty, mesh added after OBJ load)
     this._gunGroup3P = new THREE.Group();
     this._gunGroup3P.position.set(0.35, 1.22, 1.2);
     this.bodyGroup.add(this._gunGroup3P);
 
-    // 픽셀 텍스처 적용 대상 메시 목록
+    // List of meshes to apply pixel texture
     this._bodyMeshes = [body, head, legL, legR, armR, armL];
 
     scene.add(this.bodyGroup);
   }
 
-  // ── 로컬 픽셀 → 부위별 평균색으로 단색 적용 ──
-  // BoxGeometry는 UV가 각 면마다 0~1이라 16x16 DataTexture를 올리면
-  // 텍스처 전체가 늘어나 검게 보임. 대신 평균색을 material.color에 직접 설정.
+  // ── Apply local pixels as solid average color per body part ──
+  // BoxGeometry UV is 0~1 per face, so 16x16 DataTexture
+  // stretches and appears black. Set average color to material.color directly.
   applyPixels(pixels) {
     if (!pixels || !this._bodyMeshes) return;
 
@@ -364,27 +364,27 @@ export class Player {
           }
         }
       }
-      if (n === 0) return new THREE.Color(0x556688); // 기본색
+      if (n === 0) return new THREE.Color(0x556688); // default color
       return new THREE.Color(r/n/255, g/n/255, b/n/255);
     };
 
     const [body, head, legL, legR, armR, armL] = this._bodyMeshes;
     const setColor = (mesh, color) => {
-      mesh.material.map   = null;   // 텍스처 제거 (검은색 원인)
+      mesh.material.map   = null;   // remove texture (causes black)
       mesh.material.color.copy(color);
       mesh.material.needsUpdate = true;
     };
 
-    setColor(head, avg(4, 11,  0,  4));   // 머리
-    setColor(body, avg(3, 12,  5, 10));   // 몸통
-    setColor(legL, avg(4,  7, 11, 15));   // 왼다리
-    setColor(legR, avg(8, 11, 11, 15));   // 오른다리
-    setColor(armR, avg(13,15,  5,  9));   // 오른팔
-    setColor(armL, avg(0,  2,  5,  9));   // 왼팔
+    setColor(head, avg(4, 11,  0,  4));   // head
+    setColor(body, avg(3, 12,  5, 10));   // Torso
+    setColor(legL, avg(4,  7, 11, 15));   // Left leg
+    setColor(legR, avg(8, 11, 11, 15));   // Right leg
+    setColor(armR, avg(13,15,  5,  9));   // Right arm
+    setColor(armL, avg(0,  2,  5,  9));   // Left arm
   }
 
   // ─────────────────────────────────────────
-  // 입력
+  // Input
   // ─────────────────────────────────────────
   _bindInput() {
     window.addEventListener('keydown', e => { this.keys[e.code] = true; });
@@ -400,7 +400,7 @@ export class Player {
   }
 
   // ─────────────────────────────────────────
-  // 충돌
+  // Collision
   // ─────────────────────────────────────────
   checkCollision(pos) {
     const feetY = pos.y, headY = pos.y + this.playerHeight;
@@ -431,7 +431,7 @@ export class Player {
   }
 
   // ─────────────────────────────────────────
-  // 사격
+  // Shooting
   // ─────────────────────────────────────────
   shoot(checkHitFn) {
     this._syncWeaponStats();
@@ -466,7 +466,7 @@ export class Player {
     if (state.ammo === 0 && state.reserve > 0) this.startReload();
   }
 
-  // 보급상자에서 리필
+  // Refill from supply crate
   refillFromCrate() {
     this.ammo         = this.maxAmmo;
     this.totalAmmo    = this.maxTotalAmmo;
@@ -495,7 +495,7 @@ export class Player {
   }
 
   startReload() {
-    // 재장전은 점프/이동 중에도 가능 (canUseBaseAction은 붕대 전용)
+    // Reload allowed during jump/movement (canUseBaseAction is bandage-only)
     if (this.weaponSlot === 1 || this.weaponSlot === 2 || this.weaponSlot === 5) {
       const weapon = this.getLoadoutWeapon();
       const state = this.weaponStates[weapon.id];
@@ -522,10 +522,10 @@ export class Player {
   }
 
   // ─────────────────────────────────────────
-  // 메인 업데이트
+  // Main update
   // ─────────────────────────────────────────
   update(camCtrl, checkHitFn, dt = 1/60) {
-    // 60fps 기준으로 정규화된 스케일 (FPS 독립적 물리)
+    // Scale normalised to 60fps (FPS-independent physics)
     const scale = dt * 60;
     const keys = this.keys, mouse = this.mouse;
 
@@ -534,7 +534,7 @@ export class Player {
     this.adsProgress += (this.isAiming ? 1 : -1) * 0.1 * scale;
     this.adsProgress  = Math.max(0, Math.min(1, this.adsProgress));
 
-    // 반동 감쇠
+    // Recoil damping
     this.recoilOffset = Math.max(0, this.recoilOffset - 0.05 * scale);
     if (camCtrl) {
       camCtrl.yaw += this.recoilYaw;
@@ -543,7 +543,7 @@ export class Player {
       this.recoilPitch *= Math.pow(0.52, scale);
     }
 
-    // 이동 방향
+    // Movement direction
     const yawRad = THREE.MathUtils.degToRad(camCtrl.yaw);
     const front  = new THREE.Vector3(Math.cos(yawRad), 0, Math.sin(yawRad));
     const right  = new THREE.Vector3(-Math.sin(yawRad), 0, Math.cos(yawRad));
@@ -555,7 +555,7 @@ export class Player {
     if (keys['KeyA']) { moveDir.addScaledVector(right, -1); targetTilt -= 3; }
     if (keys['KeyD']) { moveDir.addScaledVector(right,  1); targetTilt += 3; }
 
-    // 무기 슬롯 전환
+    // Weapon slot switch
     if (keys['Digit1'] && !this._slot1Held && !this.isReloading) { this.weaponSlot = 1; this._slot1Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit1']) this._slot1Held = false;
     const canSwitchWeapon = !this.isReloading && !this.sniperReloading && !this.pistolReloading &&
@@ -569,7 +569,7 @@ export class Player {
     if (keys['Digit3'] && !this._slot3Held && this.bandageCount > 0 && !this.isReloading) { this.weaponSlot = 3; this._slot3Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit3']) this._slot3Held = false;
 
-    // M키 사격모드 (M4A1 슬롯에서만, 저격/권총은 SEMI 고정)
+    // M key fire mode (M4A1 only, sniper/pistol are SEMI fixed)
     if (this.weaponSlot === 1) {
       if (keys['KeyM']) {
         if (!this.mKeyHeld) {
@@ -580,7 +580,7 @@ export class Player {
       } else { this.mKeyHeld = false; }
     }
 
-    // ── 슬롯별 좌클릭 동작 ──
+    // ── Per-slot left-click action ──
     this.fireCooldown = Math.max(0, this.fireCooldown - scale);
     this.pistolFireCd = Math.max(0, this.pistolFireCd - scale);
     this.sniperFireCd = Math.max(0, this.sniperFireCd - scale);
@@ -588,7 +588,7 @@ export class Player {
       state.cooldown = Math.max(0, state.cooldown - scale);
     }
 
-    // 저격총 우클릭 시 자동 1인칭 전환
+    // Auto switch to 1P view on sniper right-click
     const equipped = this.getLoadoutWeapon();
     if (equipped.scope && mouse.right && camCtrl && !camCtrl.isFirstPerson) {
       camCtrl.cameraDistance = 0;
@@ -606,7 +606,7 @@ export class Player {
       this.grenadeCharge = 0;
       this.isBandaging = false;
     } else if (false && this.weaponSlot === 2) {
-      // ── 저격총: SEMI, 우클릭 스코프 ──
+      // ── Sniper: SEMI, right-click scope ──
       this.isScopedIn = mouse.right && !this.sniperReloading;
       this.scopeProgress += (this.isScopedIn ? 1 : -1) * 0.12;
       this.scopeProgress = Math.max(0, Math.min(1, this.scopeProgress));
@@ -625,7 +625,7 @@ export class Player {
       }
       if (!mouse.left) this.mouseLeftHeld = false;
 
-      // 자동 리로드 (탄이 0이면)
+      // Auto reload (when ammo hits 0)
       if (this.sniperAmmo === 0 && !this.sniperReloading && this.sniperTotalAmmo > 0) {
         this.sniperReloading = true;
         this.sniperReloadTimer = this.sniperReloadDur;
@@ -636,7 +636,7 @@ export class Player {
       this.isBandaging = false;
 
     } else if (false && this.weaponSlot === 5) {
-      // ── 권총: SEMI ──
+      // ── Pistol: SEMI ──
       this.isScopedIn = false; this.scopeProgress = 0;
       if (mouse.left && !this.mouseLeftHeld) {
         if (!this.pistolReloading && this.pistolAmmo > 0 && this.pistolFireCd === 0) {
@@ -652,7 +652,7 @@ export class Player {
       }
       if (!mouse.left) this.mouseLeftHeld = false;
 
-      // 자동 리로드
+      // Auto reload
       if (this.pistolAmmo === 0 && !this.pistolReloading && this.pistolTotalAmmo > 0) {
         this.pistolReloading = true;
         this.pistolReloadTimer = this.pistolReloadDur;
@@ -663,19 +663,19 @@ export class Player {
       this.isBandaging = false;
 
     } else if (this.weaponSlot === 4) {
-      // 수류탄: 좌클릭 홀드로 충전, 떼면 투척
+      // Grenade: hold left-click to charge, release to throw
       if (mouse.left && this.grenadeCount > 0) {
         this.isChargingGrenade = true;
-        this.grenadeCharge = Math.min(this.grenadeCharge + 1, this.grenadeMaxCharge);
+        this.grenadeCharge = Math.min(this.grenadeCharge + scale, this.grenadeMaxCharge);
       } else if (!mouse.left && this.isChargingGrenade) {
-        // 마우스 뗌 → 투척
+        // Mouse released → throw
         const power = this.grenadeCharge / this.grenadeMaxCharge;
         if (this.grenadeSystem) {
           const yawRad = THREE.MathUtils.degToRad(camCtrl.yaw);
           const throwFront = new THREE.Vector3(Math.cos(yawRad), 0, Math.sin(yawRad));
           this.grenadeSystem.throw(this.pos.clone(), throwFront, camCtrl.pitch, power);
           this.grenadeCount--;
-          if (this.grenadeCount === 0) this.weaponSlot = 1; // 다 쓰면 총으로
+          if (this.grenadeCount === 0) this.weaponSlot = 1; // switch to gun when empty
         }
         this.grenadeCharge = 0;
         this.isChargingGrenade = false;
@@ -684,7 +684,7 @@ export class Player {
       this.isBandaging = false;
 
     } else if (this.weaponSlot === 3) {
-      // 붕대: 좌클릭 홀드 1.5초 → 30 HP 회복
+      // Bandage: hold left-click 1.5s → heal 30 HP
       if (mouse.left && this.bandageCount > 0 && this.health < this.maxHealth && !this.isBandaging && this.canUseBaseAction?.()) {
         this.isBandaging  = true;
         this.bandageTimer = this.bandageDuration;
@@ -701,7 +701,7 @@ export class Player {
     const isMoving = moveDir.length() > 0;
     if (isMoving) moveDir.normalize();
 
-    // 워킹 밥
+    // Walking bob
     if (isMoving && !this.isJumping && !this.isSliding) {
       this.moveTime += this.baseSpeed * 2.25 * scale;
       this.bobAmp   += (1 - this.bobAmp) * 0.1 * scale;
@@ -709,14 +709,14 @@ export class Player {
       this.bobAmp += (0 - this.bobAmp) * 0.1 * scale;
     }
 
-    // 대시 쿨다운
+    // Dash cooldown
     if (this.dashCooldown > 0) {
       this.dashCooldown -= scale;
       if (this.dashCooldown < 0) this.dashCooldown = 0;
       if (this.onHudUpdate) this.onHudUpdate();
     }
 
-    // 슬라이드 시작
+    // Slide start
     if (keys['ShiftLeft'] && !this.isSliding && !this.isJumping && isMoving && this.dashCooldown <= 0) {
       this.isSliding  = true;
       this.slideSpeed = this.baseSpeed * 6.8;
@@ -725,10 +725,10 @@ export class Player {
       if (this.onHudUpdate) this.onHudUpdate();
     }
 
-    // 점프 (슬라이드 중에도 가능 → 슬라이드 취소 후 점프)
+    // Jump (possible during slide → cancel slide then jump)
     const spacePressed = keys['Space'] && !this._spaceHeld;
     if (keys['Space'] && !this.isJumping) {
-      this.isSliding = false;   // 슬라이드 즉시 취소
+      this.isSliding = false;   // Immediately cancel slide
       this.yVel      = this.jumpStr;
       this.isJumping = true;
     }
@@ -737,13 +737,13 @@ export class Player {
     let actualMove = new THREE.Vector3();
     if (this.isSliding) {
       actualMove.copy(this.slideDir).multiplyScalar(this.slideSpeed * scale);
-      this.slideSpeed -= 0.045 * scale;   // dt 기반 감속
+      this.slideSpeed -= 0.045 * scale;   // dt-based deceleration
       if (this.slideSpeed <= this.baseSpeed) this.isSliding = false;
     } else {
       if (isMoving) actualMove.copy(moveDir).multiplyScalar((this.baseSpeed + this.speedBoost) * scale);
     }
 
-    // 충돌 이동
+    // Collision movement
     if (actualMove.length() > 0) {
       const tryX = this.pos.clone(); tryX.x += actualMove.x;
       if (!this.checkCollision(tryX)) this.pos.x = tryX.x;
@@ -751,7 +751,7 @@ export class Player {
       if (!this.checkCollision(tryZ)) this.pos.z = tryZ.z;
     }
 
-    // 중력
+    // Gravity
     this.yVel += this.gravity * scale;
     if (this.speedBoost > 0) this.speedBoost *= Math.pow(0.94, scale);
     this.padCooldown = Math.max(0, this.padCooldown - scale);
@@ -765,7 +765,7 @@ export class Player {
 
     this._handleMapBoosters(spacePressed, moveDir);
 
-    // 리로드
+    // Reload
     if (this.isReloading) {
       this.reloadTimer -= scale;
       if (this.reloadTimer <= 0) {
@@ -779,7 +779,7 @@ export class Player {
       }
     }
 
-    // 저격총 리로드
+    // Sniper reload
     if (this.sniperReloading) {
       this.sniperReloadTimer -= scale;
       if (this.sniperReloadTimer <= 0) {
@@ -792,7 +792,7 @@ export class Player {
       }
     }
 
-    // 권총 리로드
+    // Pistol reload
     if (this.pistolReloading) {
       this.pistolReloadTimer -= scale;
       if (this.pistolReloadTimer <= 0) {
@@ -819,7 +819,7 @@ export class Player {
       }
     }
 
-    // 붕대 사용 타이머
+    // Bandage use timer
     if (this.isBandaging) {
       this.bandageTimer -= scale;
       if (this.bandageTimer <= 0) {
@@ -830,14 +830,14 @@ export class Player {
         if (this.onHudUpdate) this.onHudUpdate();
         if (this.onBandageUsed) this.onBandageUsed();
       }
-      // 마우스 떼거나 이동하면 취소
+      // Cancel if mouse released or moving
       if (!this.mouse.left) {
         this.isBandaging = false;
         this.bandageTimer = 0;
       }
     }
 
-    // 사망/추락
+    // Death/fall
     if (this.health <= 0 || this.pos.y <= -20) {
       this.weaponAmmo.rifle.ammo     = this.weaponProfiles.rifle.maxAmmo;
       this.weaponAmmo.rifle.reserve  = this.weaponProfiles.rifle.maxReserve;
@@ -850,7 +850,7 @@ export class Player {
       }
       this._syncWeaponStats();
       this.grenadeCount = this.maxGrenades;
-      this.bandageCount = 0;          // 붕대는 죽으면 소멸
+      this.bandageCount = 0;          // Bandage lost on death
       this.isBandaging  = false;
       this.isSliding    = false;
       this.yVel         = 0;
@@ -862,7 +862,7 @@ export class Player {
 
     this._updateLocalBody(camCtrl);
     this._updateFirstPersonWeapon(camCtrl);
-    if (this.grenadeSystem) this.grenadeSystem.update();
+    if (this.grenadeSystem) this.grenadeSystem.update(dt);
   }
 
   _handleMapBoosters(spacePressed, moveDir) {
@@ -896,7 +896,7 @@ export class Player {
   }
 
   // ─────────────────────────────────────────
-  // 3인칭 바디 업데이트
+  // 3P body update
   // ─────────────────────────────────────────
   _updateLocalBody(camCtrl) {
     const fp = camCtrl.isFirstPerson;
@@ -907,42 +907,42 @@ export class Player {
     this.bodyGroup.position.set(this.pos.x, this.pos.y + 0.4 + slideOffset, this.pos.z);
     this.bodyGroup.rotation.y = -THREE.MathUtils.degToRad(camCtrl.yaw) - Math.PI / 2;
 
-    // 머리 pitch
+    // Head pitch
     this._headPivot.rotation.x = THREE.MathUtils.degToRad(-camCtrl.pitch);
 
-    // 다리 스윙
+    // Leg swing
     const swing = this.isSliding ? 0 : Math.sin(this.moveTime * 6) * (20 * Math.PI/180) * this.bobAmp;
     this._legLPivot.rotation.x = this.isSliding ?  (70*Math.PI/180) :  swing;
     this._legRPivot.rotation.x = this.isSliding ? -(70*Math.PI/180) : -swing;
 
-    // 팔
+    // Arms
     const ads = this.adsProgress;
     this._armRPivot.rotation.x = THREE.MathUtils.degToRad(65 - ads*15);
     this._armRPivot.rotation.z = THREE.MathUtils.degToRad(-20 + ads*10);
     this._armLPivot.rotation.x = THREE.MathUtils.degToRad(45 + ads*10);
     this._armLPivot.rotation.z = THREE.MathUtils.degToRad( 40 - ads*20);
 
-    // 총 반동
+    // Gun recoil
     this._gunGroup3P.rotation.x = -this.recoilOffset * 0.3;
   }
 
   // ─────────────────────────────────────────
-  // 1인칭 무기 업데이트 (Python draw_first_person_weapon 직역)
+  // 1P weapon update
   // ─────────────────────────────────────────
   _updateFirstPersonWeapon(camCtrl) {
     const fp = camCtrl.isFirstPerson;
     const equipped = this.getLoadoutWeapon();
 
-    // 슬롯에 따라 표시/숨김
+    // Show/hide by slot
     this._fpWeaponGroup.visible  = fp && !equipped.scope && (this.weaponSlot === 1 || this.weaponSlot === 2);
     this._fpGrenadeGroup.visible = fp && this.weaponSlot === 4;
-    // 저격총/권총은 별도 그룹 (없으면 기본 총 그룹 재활용)
+    // Sniper/pistol use separate groups (fall back to main gun group)
     if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && equipped.scope;
     if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && this.weaponSlot === 5 && !equipped.scope;
 
     if (!fp) return;
 
-    // ── 수류탄 슬롯 애니메이션 ──
+    // ── Grenade slot animation ──
     if (this.weaponSlot === 4) {
       const charge = this.grenadeCharge / this.grenadeMaxCharge;
       const bob = Math.sin(this.moveTime * 10) * 0.004 * this.bobAmp;
@@ -970,13 +970,13 @@ export class Player {
     const bobX = Math.cos(this.moveTime * 5)  * 0.006 * this.bobAmp * bobFactor;
     const bobY = Math.sin(this.moveTime * 10) * 0.006 * this.bobAmp * bobFactor;
 
-    // ── 저격총 슬롯 ──
+    // ── Sniper slot ──
     if (equipped.scope) {
       const scope = this.scopeProgress;
-      // 스코프 시 중앙으로, 손 떨림 최소화
+      // Scope: center weapon, minimise hand sway
       const sx = 0.22 + (0.0 - 0.22) * scope;
-      const sy = -0.78 + (0.68 - 0.78) * scope;  // 살짝 위로
-      const sz = -0.55 + (-0.20 + 0.55) * scope;  // 더 앞으로
+      const sy = -0.78 + (0.68 - 0.78) * scope;  // slightly up
+      const sz = -0.55 + (-0.20 + 0.55) * scope;  // closer
       let grp = this._fpSniperGroup || this._fpWeaponGroup;
       const bx = Math.cos(this.moveTime * 5)  * 0.006 * this.bobAmp * (scope > 0.5 ? 0.1 : 1.0);
       const by = Math.sin(this.moveTime * 10) * 0.006 * this.bobAmp * (scope > 0.5 ? 0.1 : 1.0);
@@ -989,7 +989,7 @@ export class Player {
       return;
     }
 
-    // ── 권총 슬롯 ──
+    // ── Pistol slot ──
     if (this.weaponSlot === 5) {
       let grp = this._fpPistolGroup || this._fpWeaponGroup;
       const isAimingP = this.mouse.right;
@@ -1002,7 +1002,7 @@ export class Player {
       return;
     }
 
-    // ── M4A1 슬롯 ──
+    // ── M4A1 slot ──
     let reloadY = 0, reloadRX = 0, reloadRZ = 0;
     if (this.isReloading) {
       const prog = 1 - (this.reloadTimer / this.reloadDuration);
