@@ -309,6 +309,7 @@ export class Network {
     this._targetHp[targetUid] = Math.max(0, this._targetHp[targetUid] - damage);
 
     const weapon = ['rifle', 'sniper', 'pistol'].includes(weaponType) ? weaponType : 'rifle';
+    const hitId  = `${this.myUid}_${Date.now()}`;
     const hitId  = `${this.myUid.slice(0, 8)}_${Date.now()}`;
 
     set(ref(this.db, `hits/${targetUid}/${hitId}`), {
@@ -396,7 +397,8 @@ export class Network {
   // ── 채팅 ──
   sendChat(text) {
     if (!text || !this.myUid) return;
-    const msgId = `${this.myUid.slice(0, 8)}_${Date.now()}`;
+    // msgId = uid_timestamp 형식 → Firebase 규칙에서 uid 검증 가능
+    const msgId = `${this.myUid}_${Date.now()}`;
     set(ref(this.db, `rooms/${this.roomId}/chat/${msgId}`), {
       uid:      this.myUid,
       nickname: this.nickname,
