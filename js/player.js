@@ -939,10 +939,15 @@ export class Player {
     const fp       = camCtrl.isFirstPerson;
     const equipped = this.getLoadoutWeapon();
 
-    this._fpWeaponGroup.visible  = fp && !equipped.scope && (this.weaponSlot === 1 || this.weaponSlot === 2);
-    this._fpGrenadeGroup.visible = fp && this.weaponSlot === 4;
-    if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && equipped.scope;
-    if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && this.weaponSlot === 5 && !equipped.scope;
+    const slot     = this.weaponSlot;
+    const isSniper = equipped.scope && slot === 2;
+    const isPistol = slot === 5;
+
+    // Show exactly one group at a time — no overlap
+    this._fpWeaponGroup.visible  = fp && slot === 1;                       // M4A1 only
+    this._fpGrenadeGroup.visible = fp && slot === 4;
+    if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && isSniper;
+    if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && isPistol;
 
     if (!fp) return;
 
