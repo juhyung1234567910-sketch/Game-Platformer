@@ -1,0 +1,83 @@
+{
+  "rules": {
+    ".read":  false,
+    ".write": false,
+
+    "players": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".read":  "auth != null",
+        ".validate": "newData.hasChildren(['pos','nickname','ts'])"
+      }
+    },
+
+    "hits": {
+      "$victimUid": {
+        ".read": "auth != null && auth.uid === $victimUid",
+        "$hitId": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['damage','from','ts'])
+                     && newData.child('from').val() === auth.uid
+                     && newData.child('damage').isNumber()
+                     && newData.child('damage').val() >= 1
+                     && newData.child('damage').val() <= 100
+                     && newData.child('ts').isNumber()"
+        }
+      }
+    },
+
+    "rooms": {
+      ".read": "auth != null",
+      "$roomId": {
+
+        "meta": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['id','updatedAt'])"
+        },
+
+        "state": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".read":  "auth != null",
+            ".validate": "newData.hasChildren(['pos','nickname','ts'])
+                       && newData.child('ts').isNumber()"
+          }
+        },
+
+        "chat": {
+          ".read": "auth != null",
+          "$msgId": {
+            ".write": "auth != null
+                    && $msgId.beginsWith(auth.uid)
+                    && !data.exists()",
+            ".validate": "newData.hasChildren(['uid','nickname','text','ts'])
+                       && newData.child('uid').val() === auth.uid
+                       && newData.child('text').isString()
+                       && newData.child('text').val().length >= 1
+                       && newData.child('text').val().length <= 80
+                       && newData.child('ts').isNumber()"
+          }
+        }
+
+      }
+    },
+
+    "uid_map": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "users": {
+      "$nickname": {
+        ".read":  "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['kills','deaths'])
+                   && newData.child('kills').isNumber()
+                   && newData.child('deaths').isNumber()"
+      }
+    }
+  }
+}
