@@ -264,11 +264,19 @@ export class Network {
 
   sendHit(targetUid, damage = 15, weaponType = 'rifle') {
     if (!this.myUid) return;
+    if (!this._authReady()) {
+      // Auth 토큰이 아직 준비되지 않음 — 준비되면 재시도
+      const unsub = onAuthStateChanged(this.auth, user => {
+        unsub();
+        if (user?.uid === this.myUid) this.sendHit(targetUid, damage, weaponType);
+      });
+      return;
+    }
     this._targetHp[targetUid] ??= 100;
     this._targetHp[targetUid]  = Math.max(0, this._targetHp[targetUid] - damage);
     set(ref(this.db, `hits/${targetUid}/${this.myUid}_${Date.now()}`), {
       damage, weapon: VALID_WEAPONS.has(weaponType) ? weaponType : 'rifle', from: this.myUid, ts: Date.now(),
-    }).catch(() => {});
+    }).catch(e => console.warn('[Network] sendHit failed:', e));
     if (this._targetHp[targetUid] <= 0) {
       this._targetHp[targetUid] = 100;
       this.confirmKill(targetUid);
@@ -315,5 +323,6 @@ export class Network {
   listenChat(cb)   { this.onChat = cb; }
   disconnect()     { remove(ref(this.db, `players/${this.myUid}`)).catch(() => {}); remove(ref(this.db, this._path(`state/${this.myUid}`))).catch(() => {}); this._clearListeners(); }
   isInvincible()   { return Date.now() - this._respawnTime < this._invincibleDuration; }
+  _authReady()     { return !!this.auth.currentUser && this.auth.currentUser.uid === this.myUid; }
   getPlayerCount() { return Object.keys(this.otherPlayers).length + 1; }
 }
