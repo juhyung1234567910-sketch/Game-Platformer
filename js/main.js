@@ -649,6 +649,8 @@ network.onPlayersUpdate = (others) => {
 
 network.onHealthUpdate = (hp) => {
   if (network.isInvincible()) return;
+  // Bug fix: 붕대 사용 중에 network hp로 덮어쓰면 힐 효과가 사라짐 → 무시
+  if (player.isBandaging) return;
   player.health = hp;
   updateHud();
   dmgFlash.classList.add('active');
