@@ -1235,25 +1235,92 @@ export class Player {
       return;
     }
 
-    // ── Reload animation ──
-    let reloadDY = 0, reloadRX = 0, reloadRZ = 0;
+    // ── Reload animation (weapon-specific) ──
+    let reloadDX = 0, reloadDY = 0, reloadDZ = 0;
+    let reloadRX = 0, reloadRZ = 0;
     const reloading = this.isReloading ||
       (slot === 2 && this.sniperReloading) ||
       (slot === 5 && this.pistolReloading) ||
       (this._fpGroups?.[wid] && this.weaponStates?.[wid]?.reloading);
     if (reloading) {
-      const dur = this.reloadDuration || 60;
-      const timer = this.reloadTimer ?? 0;
-      const prog = Math.max(0, Math.min(1, 1 - timer / dur));
-      reloadDY  = -Math.sin(prog * Math.PI) * 0.10;
-      reloadRX  =  Math.sin(prog * Math.PI) * 20;
-      reloadRZ  =  Math.sin(prog * Math.PI) * 7;
+      const state = this.weaponStates?.[wid];
+      const dur   = state?.reloadTimer !== undefined
+        ? (this.getLoadoutWeapon()?.reload || 60)
+        : (this.reloadDuration || 60);
+      const timerVal = state?.reloadTimer !== undefined ? state.reloadTimer : (this.reloadTimer ?? 0);
+      const prog = Math.max(0, Math.min(1, 1 - timerVal / dur));
+      const wave = Math.sin(prog * Math.PI);
+
+      if (wid === 'm4a1') {
+        // M4A1: mag drop down then snap back
+        reloadDY  = -wave * 0.13;
+        reloadDZ  =  wave * 0.04;
+        reloadRX  =  wave * 22;
+        reloadRZ  =  wave * 8;
+      } else if (wid === 'sniper') {
+        // Sniper: big tilt to the side (bolt action feel)
+        reloadDY  = -wave * 0.10;
+        reloadRX  =  wave * 18;
+        reloadRZ  = -wave * 15;  // tilt left
+      } else if (wid === 'pistol') {
+        // Pistol: quick dip
+        reloadDY  = -wave * 0.09;
+        reloadRX  =  wave * 15;
+        reloadRZ  =  wave * 5;
+      } else if (wid === 'smg') {
+        // SMG: fast mag swap, slight rotate
+        reloadDY  = -wave * 0.08;
+        reloadRX  =  wave * 16;
+        reloadRZ  =  wave * 6;
+      } else if (wid === 'shotgun') {
+        // Shotgun: tilt forward to load shells
+        reloadDY  = -wave * 0.07;
+        reloadDZ  =  wave * 0.06;
+        reloadRX  =  wave * 25;
+        reloadRZ  =  Math.sin(prog * Math.PI * 2) * 5;  // wobble
+      } else if (wid === 'lmg') {
+        // LMG: heavy belt reload, big dip
+        reloadDY  = -wave * 0.15;
+        reloadRX  =  wave * 28;
+        reloadRZ  =  Math.sin(prog * Math.PI * 1.5) * 10;
+      } else if (wid === 'dmr') {
+        // DMR: precise mag insert, tilt right
+        reloadDY  = -wave * 0.10;
+        reloadRX  =  wave * 20;
+        reloadRZ  =  wave * 10;
+      } else if (wid === 'burst') {
+        // Burst: similar to M4
+        reloadDY  = -wave * 0.11;
+        reloadRX  =  wave * 20;
+        reloadRZ  =  wave * 7;
+      } else if (wid === 'rail') {
+        // Rail gun: charge up motion, push forward then back
+        reloadDZ  =  wave * 0.08;
+        reloadDY  = -wave * 0.06;
+        reloadRX  =  wave * 12;
+        reloadRZ  =  Math.sin(prog * Math.PI * 2) * 4;
+      } else if (wid === 'carbine') {
+        // Carbine: compact mag swap
+        reloadDY  = -wave * 0.09;
+        reloadRX  =  wave * 17;
+        reloadRZ  =  wave * 6;
+      } else if (wid === 'rpg') {
+        // RPG: tilt down to load rocket from below
+        reloadDY  = -wave * 0.18;
+        reloadRX  =  wave * 30;
+        reloadRZ  = -wave * 8;  // tilt left (shoulder support)
+      } else {
+        // Default
+        reloadDY  = -wave * 0.10;
+        reloadRX  =  wave * 20;
+        reloadRZ  =  wave * 7;
+      }
     }
 
     grp.position.set(
-      HIP_X + (ADS_X - HIP_X) * ads + bobX,
+      HIP_X + (ADS_X - HIP_X) * ads + bobX + reloadDX,
       HIP_Y + (ADS_Y - HIP_Y) * ads + recoilY + bobY + reloadDY,
-      HIP_Z + (ADS_Z - HIP_Z) * ads + recoilZ
+      HIP_Z + (ADS_Z - HIP_Z) * ads + recoilZ + reloadDZ
     );
 
     if (isOBJ) {
@@ -1275,6 +1342,13 @@ export class Player {
           .filter(g => !g.exploded)
           .map(g => ({ px: g.mesh.position.x, py: g.mesh.position.y, pz: g.mesh.position.z }))
       : [];
+    // 활성 로켓 위치/방향 수집
+    const rockets = (this._rockets || [])
+      .filter(r => r.alive)
+      .map(r => ({
+        px: r.pos.x, py: r.pos.y, pz: r.pos.z,
+        vx: r.vel.x, vy: r.vel.y, vz: r.vel.z,
+      }));
     return {
       pos:        this.pos.toArray(),
       yaw:        camCtrl.yaw,
@@ -1285,6 +1359,7 @@ export class Player {
       recoil:     this.recoilOffset,
       is_aiming:  this.isAiming,
       grenades,
+      rockets,
     };
   }
 
