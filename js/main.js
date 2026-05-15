@@ -255,7 +255,12 @@ function updateHud() {
   healthFill.className   = pct <= 0.3 ? 'crit' : pct <= 0.6 ? 'warn' : '';
   healthNum.style.color  = pct <= 0.3 ? '#ff3c3c' : pct <= 0.6 ? '#ffcc00' : '';
 
-  if (slot === 1 || slot === 2 || slot === 5) {
+  if (slot === 6) {
+    ammoCurrentEl.textContent = '🚀 ' + player.rpgCount;
+    ammoMaxEl.textContent     = `/ ${player.maxRpgCount}  [${player.rpgReserve}]`;
+    ammoMode.textContent      = player.rpgReloading ? '[RELOADING...]' : '[RPG-7]';
+    ammoCurrentEl.classList.remove('sniper-ammo');
+  } else if (slot === 1 || slot === 2 || slot === 5) {
     ammoCurrentEl.textContent = weaponState.ammo;
     ammoMaxEl.textContent     = `/ ${weapon.maxAmmo}  [${weaponState.reserve}]`;
     ammoMode.textContent      = weaponState.reloading ? '[RELOADING...]' : `[${weapon.mode}] ${weapon.name}`;
@@ -273,8 +278,8 @@ function updateHud() {
     ammoCurrentEl.classList.remove('sniper-ammo');
   }
 
-  reloadBar.classList.toggle('blocked',  !isAtBase() && slot !== 4);
-  reloadBar.classList.toggle('visible',  player.isReloading || player.sniperReloading || player.pistolReloading || !!weaponState.reloading);
+  reloadBar.classList.toggle('blocked',  !isAtBase() && slot !== 4 && slot !== 6);
+  reloadBar.classList.toggle('visible',  player.isReloading || player.sniperReloading || player.pistolReloading || player.rpgReloading || !!weaponState.reloading);
   bandageBar.classList.toggle('visible', player.isBandaging);
 
   const invincible = network.isInvincible();
@@ -637,6 +642,83 @@ player.onBandageUsed = () => {
   updateHud();
 };
 
+// ── RPG 로켓 콜백 ──
+
+// 로켓이 플레이어 히트박스에 닿았는지 매 프레임 체크
+player.onRocketHitCheck = (prevPos, nextPos) => {
+  const seg = nextPos.clone().sub(prevPos);
+  const segLen = seg.length();
+  if (segLen < 0.001) return null;
+  const segDir = seg.clone().normalize();
+
+  for (const [pid, info] of Object.entries(network.otherPlayers)) {
+    if (!info?.pos) continue;
+    const base = new THREE.Vector3(info.pos[0], info.pos[1], info.pos[2]);
+    // HEAD 히트박스 먼저 (데미지 60)
+    for (const hb of HITBOXES) {
+      const center = base.clone(); center.y += hb.offsetY;
+      const t = rayVsCapsule(prevPos, segDir, center, hb.halfH, hb.radius);
+      if (t >= 0 && t <= segLen) {
+        const dmg = hb.name === 'HEAD' ? 60 : 40;
+        network.sendHit(pid, dmg, 'rpg');
+        showHitmarker(hb.name === 'HEAD');
+        const targetNick = info.nickname || pid.slice(-4);
+        addKillfeed(`🚀 RPG ${hb.name} +${dmg} → ${targetNick}`);
+        return { pid, dmg, part: hb.name };
+      }
+    }
+  }
+  return null;
+};
+
+// 로켓 폭발 처리
+player.onRocketExplode = (pos, hitPlayer = false) => {
+  // 폭발 비주얼
+  renderer.spawnRocketExplosion(pos);
+
+  // 화면 흔들림
+  const myCenter = player.pos.clone(); myCenter.y += 0.9;
+  const myDist   = myCenter.distanceTo(pos);
+  const RADIUS   = 8.0;
+  if (myDist < RADIUS * 1.5) {
+    dmgFlash.classList.add('active');
+    setTimeout(() => dmgFlash.classList.remove('active'), myDist < 3 ? 500 : 180);
+  }
+
+  // 자기 자신 범위 피해 (벽 충돌 시에만, 직격은 이미 hitPlayer=true)
+  if (!hitPlayer && myDist < RADIUS) {
+    const falloff = Math.max(0, 1 - (myDist / RADIUS));
+    const selfDmg = Math.round(40 * falloff * falloff * 0.6);
+    if (selfDmg > 0) {
+      player.health = Math.max(0, player.health - selfDmg);
+      player.applyKnockback(pos, 3.0 + falloff * 6.0);
+      addKillfeed(`🚀 RPG SELF ${selfDmg}`);
+    }
+  }
+
+  // 근처 다른 플레이어 범위 피해 (직격이 아닌 경우)
+  if (!hitPlayer) {
+    for (const [pid, info] of Object.entries(network.otherPlayers)) {
+      if (!info?.pos) continue;
+      const tPos = new THREE.Vector3(info.pos[0], info.pos[1] + 0.9, info.pos[2]);
+      const dist = tPos.distanceTo(pos);
+      if (dist < RADIUS) {
+        const falloff = Math.max(0, 1 - (dist / RADIUS));
+        const dmg = Math.round(40 * falloff * falloff);
+        if (dmg > 0) {
+          network.sendHit(pid, dmg, 'rpg');
+          showHitmarker(false);
+          const targetNick = info.nickname || pid.slice(-4);
+          addKillfeed(`🚀 RPG SPLASH ${dmg} → ${targetNick}`);
+        }
+      }
+    }
+  }
+
+  addKillfeed(hitPlayer ? '🚀 DIRECT HIT!' : '🚀 EXPLOSION!');
+  updateHud();
+};
+
 network.onPlayersUpdate = (others) => {
   for (const pid of Object.keys(remoteMeshes)) {
     if (!others[pid]) renderer.removeRemotePlayer(pid, remoteMeshes);
@@ -799,6 +881,8 @@ function loop() {
 
     if (player.isReloading) {
       reloadFill.style.width = ((1 - player.reloadTimer / player.reloadDuration) * 100) + '%';
+    } else if (player.rpgReloading) {
+      reloadFill.style.width = ((1 - player.rpgReloadTimer / player.rpgReloadDur) * 100) + '%';
     } else if (weaponState?.reloading) {
       reloadFill.style.width = ((1 - weaponState.reloadTimer / weapon.reload) * 100) + '%';
     }
@@ -842,8 +926,12 @@ function loop() {
     slot5El && slot5El.classList.toggle('active', player.weaponSlot === 5);
     slot4El.classList.toggle('active', player.weaponSlot === 4);
     slot3El.classList.toggle('active', player.weaponSlot === 3);
+    const slot6El = document.getElementById('slot-6');
+    if (slot6El) slot6El.classList.toggle('active', player.weaponSlot === 6);
     if (grenadeCountUI) grenadeCountUI.textContent = `×${player.grenadeCount}`;
     if (bandageCountUI) bandageCountUI.textContent = `×${player.bandageCount}`;
+    const rpgCountUI = document.getElementById('rpg-count-ui');
+    if (rpgCountUI) rpgCountUI.textContent = `×${player.rpgCount}`;
     // Update slot names to show actual weapon names
     const w1 = player.getLoadoutWeapon(1);
     const w2 = player.getLoadoutWeapon(2);
