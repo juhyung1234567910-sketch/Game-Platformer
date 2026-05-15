@@ -85,7 +85,7 @@ export class CameraController {
     // ── 워킹 밥 (1인칭 뷰 흔들림) ──
     // Python: view_bob_offset = sin(move_time*7)*0.06*bob_amp
     if (!isJumping && !isSliding) {
-      const viewBob = Math.sin(moveTime * 7) * 0.06 * bobAmp;
+      const viewBob = Math.sin(moveTime * 7) * 0.018 * bobAmp;
       this._headPos.y += viewBob;
     }
 
