@@ -317,6 +317,14 @@ export class Network {
 
   sendChat(text) {
     if (!text || !this.myUid) return;
+    if (!this._authReady()) {
+      // Auth 토큰이 아직 준비되지 않음 — 준비되면 재시도 (sendHit과 동일한 패턴)
+      const unsub = onAuthStateChanged(this.auth, user => {
+        unsub();
+        if (user?.uid === this.myUid) this.sendChat(text);
+      });
+      return;
+    }
     set(ref(this.db, this._path(`chat/${this.myUid}_${Date.now()}`)), {
       uid: this.myUid, nickname: this.nickname, text: text.slice(0, 80), ts: Date.now(),
     }).catch(() => {});
