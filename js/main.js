@@ -191,6 +191,7 @@ mapSelectEl?.addEventListener('change', () => {
   player.boxes = renderer.getBoxes();
   player.grenadeSystem.boxes = renderer.getBoxes();
   player.pos.set(0, 1, 5);
+  network.currentMapId = mapSelectEl.value;
   addKillfeed(`MAP · ${mapSelectEl.options[mapSelectEl.selectedIndex].textContent}`);
 });
 window.addEventListener('keyup', e => {
@@ -400,6 +401,8 @@ function checkHit(weaponType = 'rifle') {
 
   for (const [pid, info] of Object.entries(network.otherPlayers)) {
     if (!info?.pos) continue;
+    // 다른 맵의 플레이어는 히트 판정 제외
+    if ((info.mapId || 'spire') !== (renderer.mapId || 'spire')) continue;
     const base = new THREE.Vector3(info.pos[0], info.pos[1], info.pos[2]);
     for (const hb of HITBOXES) {
       const center = base.clone(); center.y += hb.offsetY;
@@ -618,6 +621,7 @@ player.grenadeSystem.onExplode = (pos, radius, maxDamage, meta = {}) => {
   // Damage other players
   for (const [pid, info] of Object.entries(network.otherPlayers)) {
     if (!info?.pos) continue;
+    if ((info.mapId || 'spire') !== (renderer.mapId || 'spire')) continue;
     const tPos = new THREE.Vector3(info.pos[0], info.pos[1] + 0.9, info.pos[2]);
     const dist = tPos.distanceTo(pos);
     if (dist < radius) {
@@ -653,6 +657,7 @@ player.onRocketHitCheck = (prevPos, nextPos) => {
 
   for (const [pid, info] of Object.entries(network.otherPlayers)) {
     if (!info?.pos) continue;
+    if ((info.mapId || 'spire') !== (renderer.mapId || 'spire')) continue;
     const base = new THREE.Vector3(info.pos[0], info.pos[1], info.pos[2]);
     // HEAD 히트박스 먼저 (데미지 60)
     for (const hb of HITBOXES) {
@@ -703,6 +708,7 @@ player.onRocketExplode = (pos, hitPlayer = false) => {
   if (!hitPlayer) {
     for (const [pid, info] of Object.entries(network.otherPlayers)) {
       if (!info?.pos) continue;
+      if ((info.mapId || 'spire') !== (renderer.mapId || 'spire')) continue;
       const tPos = new THREE.Vector3(info.pos[0], info.pos[1] + 0.9, info.pos[2]);
       const dist = tPos.distanceTo(pos);
       if (dist < RADIUS) {
@@ -732,13 +738,19 @@ network.onExplosion = (posArr, type) => {
 };
 
 network.onPlayersUpdate = (others) => {
+  // 같은 맵에 있는 플레이어만 렌더링
+  const myMap = renderer.mapId || 'spire';
+  const sameMapOthers = Object.fromEntries(
+    Object.entries(others).filter(([, info]) => (info.mapId || 'spire') === myMap)
+  );
+
   for (const pid of Object.keys(remoteMeshes)) {
-    if (!others[pid]) renderer.removeRemotePlayer(pid, remoteMeshes);
+    if (!sameMapOthers[pid]) renderer.removeRemotePlayer(pid, remoteMeshes);
   }
-  for (const [pid, info] of Object.entries(others)) {
+  for (const [pid, info] of Object.entries(sameMapOthers)) {
     renderer.createOrUpdateRemotePlayer(pid, info, remoteMeshes);
   }
-  playerCountEl.textContent = `PLAYERS: ${network.getPlayerCount()}`;
+  playerCountEl.textContent = `PLAYERS: ${Object.keys(sameMapOthers).length + 1}`;
 };
 
 network.onHealthUpdate = (hp) => {
@@ -919,7 +931,10 @@ function loop() {
   }
 
   // Always send position regardless of pointer lock
-  network.sendUpdate(player.getSnapshot(camCtrl));
+  const _snap = player.getSnapshot(camCtrl);
+  _snap.mapId = renderer.mapId;
+  network.currentMapId = renderer.mapId;
+  network.sendUpdate(_snap);
 
   // Supply crates
   const isFull = player.ammo === player.maxAmmo &&
