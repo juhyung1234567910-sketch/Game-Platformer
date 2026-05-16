@@ -971,6 +971,17 @@ export class Player {
       if (!this.checkCollision(tryZ)) this.pos.z = tryZ.z;
     }
 
+    // Knockback velocity (from explosions) — decays over time
+    if (this.knockbackVel && this.knockbackVel.lengthSq() > 0.0001) {
+      const kbX = this.pos.clone(); kbX.x += this.knockbackVel.x * scale;
+      if (!this.checkCollision(kbX)) this.pos.x = kbX.x; else this.knockbackVel.x = 0;
+      const kbZ = this.pos.clone(); kbZ.z += this.knockbackVel.z * scale;
+      if (!this.checkCollision(kbZ)) this.pos.z = kbZ.z; else this.knockbackVel.z = 0;
+      // 감쇠
+      this.knockbackVel.multiplyScalar(Math.pow(0.80, scale));
+      if (this.knockbackVel.lengthSq() < 0.0001) this.knockbackVel.set(0,0,0);
+    }
+
     // Gravity
     this.yVel += this.gravity * scale;
     if (this.speedBoost > 0) this.speedBoost *= Math.pow(0.94, scale);
@@ -1391,11 +1402,17 @@ export class Player {
 
   applyKnockback(origin, force) {
     const dir = this.pos.clone().sub(origin);
-    dir.y = Math.max(0.3, dir.y + 0.2);   // nerfed: was 0.5/0.4
     if (dir.lengthSq() < 0.001) dir.set(0, 1, 0);
-    dir.normalize().multiplyScalar(force);
-    this.pos.addScaledVector(dir, 0.25);   // nerfed: was 0.35
-    this.yVel = Math.max(this.yVel, dir.y * 0.30);  // nerfed: was 0.55
+    dir.normalize();
+    // y 최솟값 보정 (너무 수평으로만 날아가지 않도록)
+    if (dir.y < 0.15) { dir.y = 0.15; dir.normalize(); }
+    dir.multiplyScalar(force);
+    // 수평 knockback 속도 저장 → update()에서 매 프레임 반영 후 감쇠
+    if (!this.knockbackVel) this.knockbackVel = new THREE.Vector3();
+    this.knockbackVel.x += dir.x * 0.55;
+    this.knockbackVel.z += dir.z * 0.55;
+    // 즉시 수직 속도 반영
+    this.yVel = Math.max(this.yVel, dir.y * 0.38);
     this.isJumping = true;
   }
 
