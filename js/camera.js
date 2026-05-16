@@ -30,7 +30,7 @@ export class CameraController {
 
   onMouseMove(dx, dy, isAiming, scopeProgress = 0) {
     const scopeSens = scopeProgress > 0.5 ? 0.22 : 1.0;
-    const sens = 0.055 * (isAiming ? 0.62 : 1.0) * scopeSens;
+    const sens = 0.11 * (isAiming ? 0.62 : 1.0) * scopeSens;
     this.yaw   += dx * sens;
     this.pitch -= dy * sens;
     this.pitch  = Math.max(-89, Math.min(89, this.pitch));
