@@ -1361,14 +1361,27 @@ export class Player {
         vx: r.vel.x, vy: r.vel.y, vz: r.vel.z,
       }));
     return {
-      pos:        this.pos.toArray(),
-      yaw:        camCtrl.yaw,
-      pitch:      camCtrl.pitch,
-      move_time:  this.moveTime,
-      bob_amp:    this.bobAmp,
-      is_sliding: this.isSliding,
-      recoil:     this.recoilOffset,
-      is_aiming:  this.isAiming,
+      pos:            this.pos.toArray(),
+      yaw:            camCtrl.yaw,
+      pitch:          camCtrl.pitch,
+      move_time:      this.moveTime,
+      bob_amp:        this.bobAmp,
+      is_sliding:     this.isSliding,
+      recoil:         this.recoilOffset,
+      is_aiming:      this.isAiming,
+      weapon_slot:    this.weaponSlot,
+      is_reloading:   this.isReloading || this.sniperReloading || this.pistolReloading ||
+                      !!(this.weaponStates && Object.values(this.weaponStates).some(s => s.reloading)),
+      reload_progress: (() => {
+        if (this.isReloading)      return 1 - this.reloadTimer / this.reloadDuration;
+        if (this.sniperReloading)  return 1 - this.sniperReloadTimer / this.sniperReloadDur;
+        if (this.pistolReloading)  return 1 - this.pistolReloadTimer / this.pistolReloadDur;
+        const ws = this.weaponStates;
+        if (ws) for (const s of Object.values(ws)) {
+          if (s.reloading) return 1 - s.reloadTimer / (s.reloadDur || 60);
+        }
+        return 0;
+      })(),
       grenades,
       rockets,
     };
