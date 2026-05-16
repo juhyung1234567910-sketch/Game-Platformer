@@ -541,10 +541,10 @@ export class Player {
     armL.position.y = -0.7; armL.castShadow = true; this._armLPivot.add(armL);
     this.bodyGroup.add(this._armLPivot);
 
-    // Gun group (empty, mesh added after OBJ load)
+    // Gun group — armRPivot 자식 (팔 끝 손 위치, 몸 앞으로 배치)
     this._gunGroup3P = new THREE.Group();
-    this._gunGroup3P.position.set(0.35, 1.22, 1.2);
-    this.bodyGroup.add(this._gunGroup3P);
+    this._gunGroup3P.position.set(0.0, -0.65, -0.35);
+    this._armRPivot.add(this._gunGroup3P);
 
     // List of meshes to apply pixel texture
     this._bodyMeshes = [body, head, legL, legR, armR, armL];
@@ -1165,11 +1165,12 @@ export class Player {
     this._legLPivot.rotation.x = this.isSliding ?  (70*Math.PI/180) :  swing;
     this._legRPivot.rotation.x = this.isSliding ? -(70*Math.PI/180) : -swing;
 
-    // Arms
+    // Arms — pitch 연동으로 총이 바라보는 방향을 향하도록
     const ads = this.adsProgress;
-    this._armRPivot.rotation.x = THREE.MathUtils.degToRad(65 - ads*15);
+    const pitchRad = THREE.MathUtils.degToRad(-camCtrl.pitch);
+    this._armRPivot.rotation.x = THREE.MathUtils.degToRad(65 - ads*15) + pitchRad;
     this._armRPivot.rotation.z = THREE.MathUtils.degToRad(-20 + ads*10);
-    this._armLPivot.rotation.x = THREE.MathUtils.degToRad(45 + ads*10);
+    this._armLPivot.rotation.x = THREE.MathUtils.degToRad(45 + ads*10) + pitchRad;
     this._armLPivot.rotation.z = THREE.MathUtils.degToRad( 40 - ads*20);
 
     // Gun recoil
