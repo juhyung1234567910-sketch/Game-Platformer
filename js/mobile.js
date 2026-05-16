@@ -48,7 +48,11 @@ export class MobileControls {
     // 컨테이너
     const c = document.createElement('div');
     c.id = 'mobile-controls';
+    c.style.display = 'none'; // 게임 진입 전엔 숨김
     c.innerHTML = `
+      <!-- 전체 화면 시점 드래그 영역 (최하단) -->
+      <div id="mob-look-zone"></div>
+
       <!-- 좌측: 조이스틱 영역 -->
       <div id="mob-left">
         <div id="mob-joystick-zone">
@@ -56,17 +60,14 @@ export class MobileControls {
             <div id="mob-joystick-knob"></div>
           </div>
         </div>
-        <div id="mob-left-btns">
+      </div>
+
+      <!-- 우측: 점프/대시/리로드 + 공격키 -->
+      <div id="mob-right">
+        <div id="mob-right-btns">
           <button class="mob-btn" id="mob-jump">▲<span>JUMP</span></button>
           <button class="mob-btn" id="mob-dash">⚡<span>DASH</span></button>
           <button class="mob-btn" id="mob-reload">↺<span>RELOAD</span></button>
-        </div>
-      </div>
-
-      <!-- 우측: 시점 조작 + 공격키 -->
-      <div id="mob-right">
-        <div id="mob-look-zone"></div>
-        <div id="mob-right-btns">
           <button class="mob-btn mob-aim" id="mob-aim">◎<span>AIM</span></button>
           <button class="mob-btn mob-fire" id="mob-fire">🔴<span>FIRE</span></button>
         </div>
@@ -96,11 +97,19 @@ export class MobileControls {
         user-select: none;
         -webkit-user-select: none;
       }
+      /* 전체 화면 시점 드래그 (최하단 레이어) */
+      #mob-look-zone {
+        position: absolute; inset: 0;
+        pointer-events: auto;
+        touch-action: none;
+        z-index: 0;
+      }
       /* 좌/우 절반 */
       #mob-left, #mob-right {
         flex: 1; position: relative;
         display: flex; flex-direction: column;
         pointer-events: none;
+        z-index: 1;
       }
       /* 조이스틱 영역 */
       #mob-joystick-zone {
@@ -126,22 +135,10 @@ export class MobileControls {
         box-shadow: 0 0 12px rgba(0,255,224,0.4);
         transition: transform 0.05s;
       }
-      /* 좌측 버튼들 */
-      #mob-left-btns {
-        position: absolute; bottom: 20px; left: 160px;
-        display: flex; flex-direction: column; gap: 8px;
-        pointer-events: auto;
-      }
-      /* 시점 영역 */
-      #mob-look-zone {
-        flex: 1;
-        pointer-events: auto;
-        touch-action: none;
-      }
-      /* 우측 버튼들 */
+      /* 우측 버튼들 (점프/대시/리로드 + AIM/FIRE 모두 우측) */
       #mob-right-btns {
         position: absolute; bottom: 20px; right: 24px;
-        display: flex; flex-direction: column; gap: 10px;
+        display: flex; flex-direction: column; gap: 8px;
         align-items: flex-end;
         pointer-events: auto;
       }
@@ -285,7 +282,9 @@ export class MobileControls {
     joystickZone.addEventListener('touchend',    endJoystick, { passive: false });
     joystickZone.addEventListener('touchcancel', endJoystick, { passive: false });
 
-    // ── 시점 드래그 ──
+    // ── 시점 드래그: 전체 화면 어디서나 클릭 후 드래그 ──
+    // look-zone은 z-index 0으로 전체 화면 커버,
+    // 버튼들은 pointer-events:auto + z-index 높아서 먼저 잡힘
     lookZone.addEventListener('touchstart', e => {
       e.preventDefault();
       for (const t of e.changedTouches) {
@@ -395,5 +394,8 @@ export class MobileControls {
     // HUD pointer-events none 해제
     const hud = document.getElementById('hud');
     if (hud) hud.style.pointerEvents = 'none';
+    // 게임 진입 후 모바일 컨트롤 표시
+    const ctrl = document.getElementById('mobile-controls');
+    if (ctrl) ctrl.style.display = 'flex';
   }
 }
