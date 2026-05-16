@@ -824,6 +824,34 @@
 
     /* 듀얼 결과 */
     #duel-result-overlay { background: rgba(0,0,0,.85); }
+
+    /* ── 모바일 전용 HUD 조정 ── */
+    body.is-mobile #hud { pointer-events: none; }
+    body.is-mobile #ammo-hud,
+    body.is-mobile #health-hud {
+      /* 모바일 컨트롤과 겹치지 않도록 위치 조정 */
+      bottom: 90px;
+    }
+    body.is-mobile #online-side-panel {
+      display: none; /* 모바일에서 사이드 패널 숨김 */
+    }
+    body.is-mobile #scoreboard {
+      z-index: 250;
+    }
+    body.is-mobile #chat-input-wrap {
+      bottom: 80px;
+      z-index: 210;
+    }
+    body.is-mobile #killfeed {
+      top: 10px;
+      right: 10px;
+      font-size: 9px;
+      max-width: 40vw;
+    }
+    body.is-mobile #death-screen {
+      z-index: 210;
+    }
+    body.is-mobile canvas { cursor: default; }
   </style>
 </head>
 <body>
