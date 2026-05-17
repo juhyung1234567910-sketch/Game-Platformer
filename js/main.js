@@ -99,6 +99,7 @@ myNickEl.textContent = userInfo.nickname;
 
 // ── Initialisation ──
 const renderer = new Renderer(canvas);
+window._gameRenderer = renderer; // 비디오 설정 패널에서 접근
 const camCtrl  = new CameraController(renderer.camera);
 const player   = new Player(renderer.getBoxes(), renderer);
 const network  = new Network(userInfo);
@@ -963,7 +964,7 @@ function loop() {
     const weapon      = player.getLoadoutWeapon();
     const weaponState = player.getLoadoutState();
     const speedPulse  = player.speedBoost + (player.isSliding ? 0.045 : 0);
-    camCtrl.setFovFromScope(weapon.scope ? player.scopeProgress : 0, speedPulse);
+    camCtrl.setFovFromScope(weapon.scope ? player.scopeProgress : 0, speedPulse, renderer.getFov());
     document.body.classList.toggle('speeding', speedPulse > 0.025);
 
     if (hitmarkerTimer > 0) {
