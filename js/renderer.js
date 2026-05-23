@@ -307,7 +307,8 @@ export class Renderer {
 
     // ── 기기 성능 감지 ──
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isLowEnd = navigator.hardwareConcurrency <= 4 || isMobile;
+    this.isLowEnd = navigator.hardwareConcurrency <= 4 || isMobile;
+    const isLowEnd = this.isLowEnd;
 
     // ── WebGL Renderer ──
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobile, powerPreference: 'high-performance' });
@@ -495,6 +496,7 @@ export class Renderer {
     this.sunLight.position.set(-20, 60, -20);
     this.sunLight.castShadow = true;
     const sh = this.sunLight.shadow;
+    const isLowEnd = this.isLowEnd ?? false;
     sh.mapSize.set(isLowEnd ? 512 : 1024, isLowEnd ? 512 : 1024);  // 최적화: 저사양 512, 고사양 1024  // 고해상도 그림자맵
     sh.camera.near = 1; sh.camera.far = 300;
     sh.camera.left = -120; sh.camera.right  = 120;
