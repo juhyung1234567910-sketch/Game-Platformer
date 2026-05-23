@@ -1220,6 +1220,7 @@ function updateOnlinePlayersList(players) {
 }
 
 function showDuelRequest(fromUid, fromNick) {
+  document.exitPointerLock?.();
   const overlay = document.getElementById('duel-request-overlay');
   if (!overlay) return;
   document.getElementById('duel-from-nick').textContent = fromNick;
@@ -1240,6 +1241,7 @@ function hideDuelRequest() {
 }
 
 function showDuelPickPhase() {
+  document.exitPointerLock?.();
   const overlay = document.getElementById('duel-pick-overlay');
   if (!overlay) return;
   overlay.style.display = 'flex';
