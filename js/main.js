@@ -162,8 +162,13 @@ function isLocked() {
 
 function onPointerLockChange() {
   if (isMobile) return; // 모바일은 overlay를 mobileCtrl.activate()에서 처리
-  // Don't show lock overlay while chat is open
+  // 채팅 중이거나 무기 선택 오버레이가 열려있으면 lock-overlay 표시 안 함
   if (_chatOpen) { lockOverlay.style.display = 'none'; return; }
+  const roundOverlay = document.getElementById('round-weapon-overlay');
+  if (roundOverlay && roundOverlay.style.display !== 'none') {
+    lockOverlay.style.display = 'none';
+    return;
+  }
   lockOverlay.style.display = isLocked() ? 'none' : 'flex';
 }
 document.addEventListener('pointerlockchange',       onPointerLockChange);
@@ -836,16 +841,6 @@ network.onRoomUpdate = (room) => {
   }
 };
 
-network.onKill = (targetId, kills, deaths) => {
-  const targetNick = network.otherPlayers[targetId]?.nickname || targetId.slice(-4);
-  addKillfeed(`☠️ ${network.nickname} → ${targetNick}`, true);
-  if (kills >= matchKillLimit && !matchEnded) {
-    matchEnded = true;
-    addKillfeed(`MATCH WIN · ${matchKillLimit} KILLS`, true);
-  }
-  updateHud();
-};
-
 // ── Chat ──
 const _seenChatTs = new Set();
 
@@ -1180,7 +1175,10 @@ function showRoundWeaponSelect() {
   const grid = document.getElementById('round-weapon-grid');
   if (grid) _renderRoundWeaponGrid(grid);
 
+  // 오버레이를 먼저 표시한 뒤 포인터 락 해제
+  // (onPointerLockChange에서 오버레이 감지해 lock-overlay 표시 차단)
   overlay.style.display = 'flex';
+  lockOverlay.style.display = 'none';
   document.exitPointerLock?.();
 
   // 10초 카운트다운
@@ -1238,7 +1236,8 @@ function _applyRoundWeaponLoadout() {
   renderLoadoutUi();
   updateHud();
   addKillfeed('⚡ Loadout updated!');
-  tryLock();
+  // 포인터 락이 이미 걸려있으면 유지, 아니면 재획득
+  if (!isLocked()) tryLock();
 }
 
 document.getElementById('round-weapon-confirm')?.addEventListener('click', _applyRoundWeaponLoadout);
@@ -1247,7 +1246,7 @@ document.getElementById('round-weapon-skip')?.addEventListener('click', () => {
   const overlay = document.getElementById('round-weapon-overlay');
   if (overlay) overlay.style.display = 'none';
   addKillfeed('⚡ Loadout kept.');
-  tryLock();
+  if (!isLocked()) tryLock();
 });
 
 // ── Presence 등록 ──
@@ -1527,8 +1526,7 @@ function endDuelMatch(winnerNick) {
   }, 4500);
 }
 
-// 듀얼 중 킬 처리 — onKill 덮어쓰기
-const _originalOnKill = network.onKill;
+// ── 킬 처리 (듀얼 / 일반 배틀 공통)
 network.onKill = (targetId, kills, deaths) => {
   const targetNick = network.otherPlayers[targetId]?.nickname || targetId.slice(-4);
   addKillfeed(`☠️ ${network.nickname} → ${targetNick}`, true);
