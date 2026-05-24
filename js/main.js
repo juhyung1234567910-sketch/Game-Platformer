@@ -1615,8 +1615,11 @@ network.onKill = (targetId, kills, deaths) => {
       matchEnded = true;
       addKillfeed(`MATCH WIN · ${matchKillLimit} KILLS`, true);
     }
+    // 킬한 사람 위치 초기화 (올바른 프로퍼티명 사용)
     player.pos.set(0, 1, 5);
-    player.vel?.set(0, 0, 0);
+    player.yVel = 0;
+    player.isSliding = false;
+    player.slideSpeed = 0;
     network.sendRoundOver?.();
     showRoundWeaponSelect();
   }
