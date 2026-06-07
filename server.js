@@ -214,7 +214,16 @@ const io = new Server(server, {
 // uid → socket.id 역매핑 (한 uid = 한 소켓 가정)
 const uidToSocket = {};
 
+const MAX_PLAYERS = 80;
+
 io.on('connection', socket => {
+  // 서버 전체 동접 80명 제한
+  if (io.engine.clientsCount > MAX_PLAYERS) {
+    socket.emit('server_full');
+    socket.disconnect(true);
+    return;
+  }
+
   let myUid      = null;
   let myNickname = null;
   let myRoomId   = null;
