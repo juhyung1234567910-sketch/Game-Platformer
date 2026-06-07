@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>서비스 소개 — VOID PROTOCOL</title>
+  <meta name="description" content="VOID PROTOCOL — 브라우저에서 즐기는 리얼타임 멀티플레이어 3D FPS. 랭크 시스템, 다양한 맵, 듀얼 모드를 무료로 즐기세요."/>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --hud: #00ffe0;
+      --warn: #ffcc00;
+      --danger: #ff4444;
+      --purple: #a78bfa;
+      --bg: #060810;
+      --border: rgba(0,255,224,0.22);
+      --dim: rgba(0,255,224,0.08);
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: var(--bg);
+      color: rgba(255,255,255,0.82);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content:'';
+      position:fixed; inset:0; pointer-events:none; z-index:0;
+      background-image:
+        linear-gradient(rgba(0,255,224,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,224,0.025) 1px, transparent 1px);
+      background-size:40px 40px;
+    }
+
+    nav {
+      position:sticky; top:0; z-index:100;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 32px;
+      background:rgba(6,8,16,0.88);
+      border-bottom:1px solid var(--border);
+      backdrop-filter:blur(12px);
+      animation:slideDown .5s cubic-bezier(.16,1,.3,1) both;
+    }
+    .nav-brand {
+      font-family:'Orbitron',monospace;
+      font-size:11px; letter-spacing:5px; color:var(--hud);
+      text-decoration:none;
+      display:flex; align-items:center; gap:10px;
+    }
+    .nav-brand::before {
+      content:'';
+      width:8px; height:8px;
+      border:1px solid var(--hud);
+      transform:rotate(45deg);
+      box-shadow:0 0 10px rgba(0,255,224,0.5);
+      animation:pulse 2s ease-in-out infinite;
+    }
+    .nav-play {
+      font-family:'Orbitron',monospace;
+      font-size:10px; letter-spacing:3px; color:var(--hud);
+      text-decoration:none;
+      border:1px solid var(--hud);
+      padding:8px 18px;
+      background:rgba(0,255,224,0.08);
+      box-shadow:0 0 18px rgba(0,255,224,0.2);
+      transition:.15s;
+    }
+    .nav-play:hover { background:rgba(0,255,224,0.2); box-shadow:0 0 28px rgba(0,255,224,0.4); }
+
+    /* HERO */
+    .hero {
+      position:relative; z-index:1;
+      min-height: 92vh;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      text-align:center;
+      padding:60px 32px;
+      overflow:hidden;
+    }
+    .hero-bg {
+      position:absolute; inset:0; pointer-events:none;
+      background:
+        radial-gradient(ellipse 70% 55% at 50% 40%, rgba(0,255,224,0.09), transparent 65%),
+        radial-gradient(ellipse 40% 30% at 80% 80%, rgba(167,139,250,0.06), transparent 60%);
+    }
+    .hero-tag {
+      font-size:9px; letter-spacing:6px; color:var(--hud);
+      opacity:.55; margin-bottom:24px;
+      animation:fadeUp .5s .2s cubic-bezier(.16,1,.3,1) both;
+    }
+    .hero-title {
+      font-family:'Orbitron',monospace;
+      font-size:clamp(36px,8vw,88px);
+      font-weight:900; letter-spacing:6px;
+      color:#fff;
+      line-height:.95;
+      margin-bottom:8px;
+      animation:fadeUp .6s .3s cubic-bezier(.16,1,.3,1) both;
+      text-shadow:0 0 60px rgba(0,255,224,0.25);
+    }
+    .hero-sub {
+      font-family:'Orbitron',monospace;
+      font-size:clamp(10px,2vw,14px); letter-spacing:8px;
+      color:var(--hud); opacity:.7;
+      margin-bottom:28px;
+      animation:fadeUp .6s .35s cubic-bezier(.16,1,.3,1) both;
+    }
+    .hero-desc {
+      max-width:560px;
+      font-size:14px; line-height:1.9;
+      color:rgba(255,255,255,0.55);
+      margin-bottom:40px;
+      animation:fadeUp .6s .4s cubic-bezier(.16,1,.3,1) both;
+    }
+    .hero-cta {
+      display:flex; gap:14px; flex-wrap:wrap; justify-content:center;
+      animation:fadeUp .6s .48s cubic-bezier(.16,1,.3,1) both;
+    }
+    .cta-primary {
+      font-family:'Orbitron',monospace;
+      font-size:12px; letter-spacing:4px; color:var(--bg);
+      background:var(--hud);
+      padding:14px 32px;
+      text-decoration:none;
+      transition:.15s;
+      box-shadow:0 0 30px rgba(0,255,224,0.5);
+    }
+    .cta-primary:hover { box-shadow:0 0 50px rgba(0,255,224,0.8); transform:translateY(-1px); }
+    .cta-secondary {
+      font-family:'Orbitron',monospace;
+      font-size:12px; letter-spacing:4px; color:var(--hud);
+      border:1px solid var(--border);
+      padding:14px 32px;
+      text-decoration:none;
+      background:rgba(0,255,224,0.05);
+      transition:.15s;
+    }
+    .cta-secondary:hover { background:rgba(0,255,224,0.12); }
+
+    .hero-stats {
+      position:absolute; bottom:32px; left:50%; transform:translateX(-50%);
+      display:flex; gap:40px; flex-wrap:wrap; justify-content:center;
+      animation:fadeUp .6s .55s cubic-bezier(.16,1,.3,1) both;
+    }
+    .stat-item { text-align:center; }
+    .stat-num {
+      font-family:'Orbitron',monospace;
+      font-size:28px; font-weight:900; color:#fff;
+      line-height:1;
+    }
+    .stat-label {
+      font-size:9px; letter-spacing:3px;
+      color:rgba(255,255,255,0.35); margin-top:5px;
+    }
+
+    /* FEATURES */
+    .section {
+      position:relative; z-index:1;
+      max-width:1000px; margin:0 auto;
+      padding:80px 32px;
+    }
+    .section-tag {
+      font-size:9px; letter-spacing:5px; color:var(--hud);
+      opacity:.5; margin-bottom:12px;
+    }
+    .section-title {
+      font-family:'Orbitron',monospace;
+      font-size:clamp(18px,3vw,28px); letter-spacing:4px; color:#fff;
+      margin-bottom:48px;
+    }
+    .section-title span { color:var(--hud); }
+
+    .features-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+      gap:16px;
+    }
+    .feature-card {
+      border:1px solid rgba(255,255,255,0.07);
+      background:rgba(255,255,255,0.02);
+      padding:28px 24px;
+      transition:.2s;
+      position:relative;
+      overflow:hidden;
+    }
+    .feature-card::before {
+      content:'';
+      position:absolute; inset:0; opacity:0;
+      background:linear-gradient(135deg, rgba(0,255,224,0.06), transparent);
+      transition:.3s;
+    }
+    .feature-card:hover::before { opacity:1; }
+    .feature-card:hover { border-color:rgba(0,255,224,0.25); transform:translateY(-2px); }
+    .feature-icon {
+      font-size:28px; margin-bottom:16px;
+      display:block;
+    }
+    .feature-title {
+      font-family:'Orbitron',monospace;
+      font-size:11px; letter-spacing:3px; color:var(--hud);
+      margin-bottom:10px;
+    }
+    .feature-desc {
+      font-size:12px; line-height:1.8;
+      color:rgba(255,255,255,0.5);
+    }
+
+    /* MAPS */
+    .maps-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+      gap:12px;
+    }
+    .map-card {
+      border:1px solid rgba(255,255,255,0.07);
+      padding:24px 20px;
+      position:relative;
+      overflow:hidden;
+      transition:.2s;
+    }
+    .map-card:hover { border-color:var(--border); }
+    .map-card::after {
+      content:'';
+      position:absolute; bottom:0; left:0; right:0;
+      height:2px;
+      background:linear-gradient(90deg, var(--hud), transparent);
+      transform:scaleX(0); transform-origin:left;
+      transition:.3s;
+    }
+    .map-card:hover::after { transform:scaleX(1); }
+    .map-name {
+      font-family:'Orbitron',monospace;
+      font-size:12px; letter-spacing:3px; color:#fff;
+      margin-bottom:8px;
+    }
+    .map-desc {
+      font-size:11px; line-height:1.7;
+      color:rgba(255,255,255,0.42);
+    }
+    .map-tag {
+      display:inline-block;
+      font-size:8px; letter-spacing:2px;
+      color:var(--hud); border:1px solid var(--border);
+      padding:3px 8px; margin-top:12px;
+    }
+
+    /* WEAPONS */
+    .weapons-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+      gap:10px;
+    }
+    .weapon-card {
+      border:1px solid rgba(255,255,255,0.06);
+      padding:18px 16px;
+      display:flex; align-items:center; gap:12px;
+      transition:.15s;
+    }
+    .weapon-card:hover { border-color:rgba(255,204,0,0.3); background:rgba(255,204,0,0.04); }
+    .weapon-emoji { font-size:20px; }
+    .weapon-info {}
+    .weapon-name {
+      font-family:'Orbitron',monospace;
+      font-size:10px; letter-spacing:2px; color:var(--warn);
+      margin-bottom:3px;
+    }
+    .weapon-type { font-size:10px; color:rgba(255,255,255,0.3); }
+
+    /* RANK */
+    .ranks-row {
+      display:flex; gap:10px; flex-wrap:wrap;
+    }
+    .rank-badge {
+      display:flex; align-items:center; gap:10px;
+      border:1px solid rgba(255,255,255,0.08);
+      padding:12px 16px;
+      flex:1; min-width:130px;
+      transition:.15s;
+    }
+    .rank-badge:hover { border-color:rgba(255,255,255,0.18); }
+    .rank-diamond {
+      width:24px; height:24px;
+      border:1px solid currentColor;
+      display:grid; place-items:center;
+      font-family:'Orbitron',monospace;
+      font-size:10px; font-weight:900;
+      transform:rotate(45deg);
+      flex-shrink:0;
+    }
+    .rank-diamond span { transform:rotate(-45deg); }
+    .rank-name {
+      font-family:'Orbitron',monospace;
+      font-size:9px; letter-spacing:2px;
+    }
+
+    /* FAQ */
+    .faq-list { display:flex; flex-direction:column; gap:2px; }
+    .faq-item {
+      border:1px solid rgba(255,255,255,0.06);
+      overflow:hidden;
+    }
+    .faq-q {
+      width:100%; text-align:left;
+      background:rgba(255,255,255,0.02);
+      border:none; cursor:pointer;
+      padding:18px 20px;
+      font-family:'Share Tech Mono',monospace;
+      font-size:13px; letter-spacing:1px;
+      color:rgba(255,255,255,0.75);
+      display:flex; justify-content:space-between; align-items:center;
+      transition:.15s;
+    }
+    .faq-q:hover { background:rgba(0,255,224,0.05); color:#fff; }
+    .faq-q::after { content:'+'; color:var(--hud); font-size:18px; flex-shrink:0; transition:.2s; }
+    .faq-q.open::after { content:'−'; }
+    .faq-a {
+      max-height:0; overflow:hidden;
+      font-size:13px; line-height:1.8;
+      color:rgba(255,255,255,0.5);
+      transition:max-height .3s ease, padding .3s ease;
+      padding:0 20px;
+    }
+    .faq-a.open { max-height:200px; padding:0 20px 18px; }
+
+    /* DIVIDER */
+    .divider {
+      position:relative; z-index:1;
+      height:1px;
+      background:linear-gradient(90deg, transparent, var(--border), transparent);
+      margin:0 32px;
+    }
+
+    /* CTA BOTTOM */
+    .cta-section {
+      position:relative; z-index:1;
+      text-align:center;
+      padding:96px 32px;
+    }
+    .cta-section h2 {
+      font-family:'Orbitron',monospace;
+      font-size:clamp(20px,4vw,40px); letter-spacing:4px; color:#fff;
+      margin-bottom:16px;
+    }
+    .cta-section p {
+      font-size:13px; color:rgba(255,255,255,0.4);
+      margin-bottom:36px; letter-spacing:1px; line-height:1.8;
+    }
+
+    footer {
+      position:relative; z-index:1;
+      border-top:1px solid var(--border);
+      padding:28px 32px;
+      display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
+      font-size:9px; letter-spacing:3px;
+      color:rgba(255,255,255,0.22);
+    }
+    footer a { color:var(--hud); opacity:.5; text-decoration:none; }
+    footer a:hover { opacity:1; }
+
+    @keyframes slideDown {
+      from { transform:translateY(-16px); opacity:0; }
+      to   { transform:translateY(0); opacity:1; }
+    }
+    @keyframes fadeUp {
+      from { transform:translateY(16px); opacity:0; }
+      to   { transform:translateY(0); opacity:1; }
+    }
+    @keyframes pulse {
+      0%,100% { opacity:.5; transform:rotate(45deg) scale(.88); }
+      50%      { opacity:1;  transform:rotate(45deg) scale(1.15); }
+    }
+
+    @media(max-width:600px) {
+      nav { padding:12px 18px; }
+      .hero { min-height:80vh; }
+      .hero-stats { position:static; transform:none; margin-top:40px; }
+      .section { padding:60px 18px; }
+      .divider { margin:0 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="index.html">VOID PROTOCOL</a>
+  <a class="nav-play" href="index.html">[ PLAY NOW ]</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-tag">BROWSER · MULTIPLAYER · FREE TO PLAY</div>
+  <h1 class="hero-title">VOID<br/>PROTOCOL</h1>
+  <div class="hero-sub">MULTIPLAYER · PARKOUR · FPS</div>
+  <p class="hero-desc">
+    설치 없이 브라우저에서 즉시 즐기는 리얼타임 3D 멀티플레이어 FPS. 전략적 로드아웃, 파쿠르 이동, 랭크 시스템으로 전장을 지배하세요.
+  </p>
+  <div class="hero-cta">
+    <a class="cta-primary" href="index.html">[ 지금 플레이 ]</a>
+    <a class="cta-secondary" href="#features">[ 더 알아보기 ]</a>
+  </div>
+  <div class="hero-stats">
+    <div class="stat-item">
+      <div class="stat-num" style="color:var(--hud)">4</div>
+      <div class="stat-label">MAPS</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" style="color:var(--warn)">8+</div>
+      <div class="stat-label">WEAPONS</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" style="color:var(--purple)">10</div>
+      <div class="stat-label">RANK TIERS</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">0₩</div>
+      <div class="stat-label">COST</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+  <div class="section-tag">FEATURES · 주요 기능</div>
+  <div class="section-title">왜 <span>VOID PROTOCOL</span>인가</div>
+  <div class="features-grid">
+    <div class="feature-card">
+      <span class="feature-icon">🌐</span>
+      <div class="feature-title">NO INSTALL</div>
+      <div class="feature-desc">별도 설치 없이 웹 브라우저만으로 즉시 게임을 시작할 수 있습니다. Chrome, Edge, Firefox 지원.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">⚡</span>
+      <div class="feature-title">REAL-TIME MULTI</div>
+      <div class="feature-desc">Firebase 기반 실시간 멀티플레이. 공개 방, 비공개 방, 퀵매치 모드를 지원합니다.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🏆</span>
+      <div class="feature-title">RANKED SYSTEM</div>
+      <div class="feature-desc">아이언부터 챌린저까지 10단계 랭크. 매치 결과에 따라 RP를 획득하고 티어를 올려보세요.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🔫</span>
+      <div class="feature-title">LOADOUT SYSTEM</div>
+      <div class="feature-desc">최대 3개의 무기를 자유롭게 조합하는 커스텀 로드아웃. 전략에 맞게 구성하세요.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">⚔️</span>
+      <div class="feature-title">DUEL MODE</div>
+      <div class="feature-desc">1:1 듀얼 챌린지 시스템. 원하는 상대에게 결투를 신청하고 실력을 증명하세요.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">📱</span>
+      <div class="feature-title">MOBILE SUPPORT</div>
+      <div class="feature-desc">모바일 가상 조이스틱 및 터치 컨트롤 지원. PC와 모바일 모두에서 즐길 수 있습니다.</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- MAPS -->
+<section class="section">
+  <div class="section-tag">MAPS · 전장</div>
+  <div class="section-title">4개의 <span>전장</span>을 정복하라</div>
+  <div class="maps-grid">
+    <div class="map-card">
+      <div class="map-name">SKY SPIRE</div>
+      <div class="map-desc">고공의 첨탑 위에서 펼쳐지는 수직 전투. 낙하를 조심하라.</div>
+      <span class="map-tag">VERTICAL</span>
+    </div>
+    <div class="map-card">
+      <div class="map-name">NEON CIRCUIT</div>
+      <div class="map-desc">사이버펑크 도시 회로망을 누비는 스피드 전투. 파쿠르가 핵심.</div>
+      <span class="map-tag">SPEED</span>
+    </div>
+    <div class="map-card">
+      <div class="map-name">CRATER RUN</div>
+      <div class="map-desc">황폐한 분화구 지형의 장거리 교전. 저격수의 낙원.</div>
+      <span class="map-tag">OPEN FIELD</span>
+    </div>
+    <div class="map-card">
+      <div class="map-name">DUEL ARENA</div>
+      <div class="map-desc">1:1 결투 전용 폐쇄 공간. 오로지 실력만이 답이다.</div>
+      <span class="map-tag">DUEL ONLY</span>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- WEAPONS -->
+<section class="section">
+  <div class="section-tag">ARSENAL · 무기</div>
+  <div class="section-title"><span>무기</span>를 선택하라</div>
+  <div class="weapons-grid">
+    <div class="weapon-card"><span class="weapon-emoji">🔫</span><div class="weapon-info"><div class="weapon-name">M4A1</div><div class="weapon-type">돌격소총</div></div></div>
+    <div class="weapon-card"><span class="weapon-emoji">🎯</span><div class="weapon-info"><div class="weapon-name">SNIPER</div><div class="weapon-type">저격소총</div></div></div>
+    <div class="weapon-card"><span class="weapon-emoji">🔘</span><div class="weapon-info"><div class="weapon-name">PISTOL</div><div class="weapon-type">권총</div></div></div>
+    <div class="weapon-card"><span class="weapon-emoji">💣</span><div class="weapon-info"><div class="weapon-name">GRENADE</div><div class="weapon-type">투척무기</div></div></div>
+    <div class="weapon-card"><span class="weapon-emoji">🩹</span><div class="weapon-info"><div class="weapon-name">BANDAGE</div><div class="weapon-type">회복 아이템</div></div></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- RANKS -->
+<section class="section">
+  <div class="section-tag">RANKED · 랭크</div>
+  <div class="section-title"><span>랭크</span> 시스템</div>
+  <div class="ranks-row">
+    <div class="rank-badge" style="color:#9ca3af"><div class="rank-diamond" style="border-color:#9ca3af"><span>I</span></div><div class="rank-name">IRON</div></div>
+    <div class="rank-badge" style="color:#cd7f32"><div class="rank-diamond" style="border-color:#cd7f32"><span>B</span></div><div class="rank-name">BRONZE</div></div>
+    <div class="rank-badge" style="color:#c0c0c0"><div class="rank-diamond" style="border-color:#c0c0c0"><span>S</span></div><div class="rank-name">SILVER</div></div>
+    <div class="rank-badge" style="color:#ffd700"><div class="rank-diamond" style="border-color:#ffd700"><span>G</span></div><div class="rank-name">GOLD</div></div>
+    <div class="rank-badge" style="color:#00ffe0"><div class="rank-diamond" style="border-color:#00ffe0"><span>P</span></div><div class="rank-name">PLATINUM</div></div>
+    <div class="rank-badge" style="color:#a78bfa"><div class="rank-diamond" style="border-color:#a78bfa"><span>C</span></div><div class="rank-name">CHALLENGER</div></div>
+  </div>
+  <p style="margin-top:20px;font-size:12px;color:rgba(255,255,255,0.35);line-height:1.8;">
+    매치 승리 시 RP를 획득하고, 패배 시 차감됩니다. 일정 RP 도달 시 자동으로 티어가 상승합니다. 각 티어는 V~I 세부 단계로 나뉩니다.
+  </p>
+</section>
+
+<div class="divider"></div>
+
+<!-- FAQ -->
+<section class="section">
+  <div class="section-tag">FAQ · 자주 묻는 질문</div>
+  <div class="section-title">궁금한 점이 <span>있으신가요</span></div>
+  <div class="faq-list">
+    <div class="faq-item">
+      <button class="faq-q">게임을 즐기는 데 비용이 드나요?</button>
+      <div class="faq-a">VOID PROTOCOL은 완전 무료로 제공됩니다. 별도의 결제나 유료 아이템이 없으며, 모든 기능을 무료로 이용하실 수 있습니다. 서비스는 광고 수익으로 운영됩니다.</div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">어떤 브라우저를 지원하나요?</button>
+      <div class="faq-a">Chrome, Edge, Firefox 최신 버전을 권장합니다. WebGL 및 WebSocket을 지원하는 모든 브라우저에서 이용 가능합니다. Safari의 경우 일부 기능이 제한될 수 있습니다.</div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">모바일에서도 플레이할 수 있나요?</button>
+      <div class="faq-a">네, 모바일 기기에서도 플레이 가능합니다. 가상 조이스틱과 터치 버튼을 통해 조작할 수 있으며, 성능에 따라 그래픽 품질을 조정하여 최적의 경험을 제공합니다.</div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">치터나 핵 유저가 있으면 어떻게 하나요?</button>
+      <div class="faq-a">부정 이용자는 서비스 내 신고 기능 또는 이메일(support@voidprotocol.io)로 신고해 주시기 바랍니다. 확인 후 즉시 제재 조치를 취합니다.</div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-q">계정을 삭제하고 싶어요.</button>
+      <div class="faq-a">계정 페이지(account.html) 또는 이메일(privacy@voidprotocol.io)로 요청하시면 10영업일 이내에 처리해 드립니다. 삭제 시 모든 통계와 랭크 기록이 영구히 제거됩니다.</div>
+    </div>
+  </div>
+</section>
+
+<!-- BOTTOM CTA -->
+<div class="divider"></div>
+<section class="cta-section">
+  <h2>지금 바로 전장으로</h2>
+  <p>계정 생성 없이 게스트로도 플레이 가능합니다.<br/>로그인하면 랭크와 통계를 기록할 수 있습니다.</p>
+  <a class="cta-primary" href="index.html">[ ENTER THE VOID ]</a>
+</section>
+
+<footer>
+  <span>© 2025 VOID PROTOCOL. ALL RIGHTS RESERVED.</span>
+  <div style="display:flex;gap:20px;">
+    <a href="privacy.html">개인정보처리방침</a>
+    <a href="terms.html">이용약관</a>
+    <a href="about.html">서비스 소개</a>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.faq-q').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const answer = btn.nextElementSibling;
+      const isOpen = btn.classList.contains('open');
+      document.querySelectorAll('.faq-q').forEach(b => {
+        b.classList.remove('open');
+        b.nextElementSibling.classList.remove('open');
+      });
+      if (!isOpen) {
+        btn.classList.add('open');
+        answer.classList.add('open');
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
