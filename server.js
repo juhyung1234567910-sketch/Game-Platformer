@@ -44,7 +44,88 @@ const stmtUpdateStats = db.prepare(`
   UPDATE users SET kills = @kills, deaths = @deaths, rating = @rating
   WHERE nickname = @nickname
 `);
+// ============================================================
+// server.js 에 아래 내용을 추가하세요
+// 위치: DB 초기화 블록(db.exec) 바로 아래
+// ============================================================
 
+// ── 플랫포머 랭킹 테이블 ──────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS platformer_scores (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    nickname  TEXT NOT NULL,
+    score     INTEGER NOT NULL DEFAULT 0,
+    deaths    INTEGER NOT NULL DEFAULT 0,
+    clear_time INTEGER NOT NULL DEFAULT 0,   -- 클리어 타임 (초)
+    grade     TEXT NOT NULL DEFAULT 'D',
+    created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+  );
+  CREATE INDEX IF NOT EXISTS idx_pf_score ON platformer_scores(score DESC);
+`);
+
+const stmtInsertPfScore = db.prepare(`
+  INSERT INTO platformer_scores (nickname, score, deaths, clear_time, grade, created_at)
+  VALUES (@nickname, @score, @deaths, @clearTime, @grade, @createdAt)
+`);
+
+const stmtGetPfRank = db.prepare(`
+  SELECT nickname, score, deaths, clear_time, grade, created_at
+  FROM platformer_scores
+  ORDER BY score DESC
+  LIMIT 20
+`);
+
+const stmtGetMyBest = db.prepare(`
+  SELECT score, deaths, clear_time, grade
+  FROM platformer_scores
+  WHERE nickname = ?
+  ORDER BY score DESC
+  LIMIT 1
+`);
+
+// ── REST API: 플랫포머 클리어 기록 저장 ──────────────────
+app.post('/api/platformer/score', (req, res) => {
+  const { nickname, score, deaths, clearTime } = req.body || {};
+  if (!nickname || score == null) return res.status(400).json({ error: '필수 항목 누락' });
+
+  function getGrade(s) {
+    if (s >= 80000) return 'S';
+    if (s >= 60000) return 'A';
+    if (s >= 40000) return 'B';
+    if (s >= 20000) return 'C';
+    return 'D';
+  }
+
+  stmtInsertPfScore.run({
+    nickname,
+    score:     Number(score),
+    deaths:    Number(deaths) || 0,
+    clearTime: Number(clearTime) || 0,
+    grade:     getGrade(Number(score)),
+    createdAt: Date.now(),
+  });
+
+  return res.json({ ok: true, grade: getGrade(Number(score)) });
+});
+
+// ── REST API: 플랫포머 랭킹 조회 ─────────────────────────
+app.get('/api/platformer/ranking', (req, res) => {
+  const rows = stmtGetPfRank.all();
+  return res.json(rows);
+});
+
+// ── REST API: 내 베스트 기록 ──────────────────────────────
+app.get('/api/platformer/best/:nickname', (req, res) => {
+  const row = stmtGetMyBest.get(req.params.nickname);
+  if (!row) return res.status(404).json({ error: '기록 없음' });
+  return res.json(row);
+});
+
+// ============================================================
+// Socket.IO update_stats 핸들러는 그대로 두되,
+// 클라이언트에서 /api/platformer/score 로 직접 POST하는 방식 사용
+// (아래 클라이언트 코드 참고)
+// ============================================================
 // ── 비밀번호 해시 (auth.js 와 동일한 로직) ────────────────
 function hashPassword(pw) {
   let h = 0;
