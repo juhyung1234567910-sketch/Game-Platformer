@@ -16,11 +16,11 @@ import cors         from 'cors';
 // ── 경로 설정 ──────────────────────────────────────────────
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH    = path.join(__dirname, 'game.db');
-const STATIC_DIR = path.join(__dirname, '.');   // index.html 등이 있는 폴더
+const STATIC_DIR = path.join(__dirname, '.');
 
 // ── DB 초기화 ──────────────────────────────────────────────
 const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');  // 동시 읽기/쓰기 성능 향상
+db.pragma('journal_mode = WAL');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -32,6 +32,17 @@ db.exec(`
     rating     INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
   );
+
+  CREATE TABLE IF NOT EXISTS platformer_scores (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    nickname   TEXT NOT NULL,
+    score      INTEGER NOT NULL DEFAULT 0,
+    deaths     INTEGER NOT NULL DEFAULT 0,
+    clear_time INTEGER NOT NULL DEFAULT 0,
+    grade      TEXT NOT NULL DEFAULT 'D',
+    created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+  );
+  CREATE INDEX IF NOT EXISTS idx_pf_score ON platformer_scores(score DESC);
 `);
 
 // ── Prepared Statements ────────────────────────────────────
@@ -44,37 +55,17 @@ const stmtUpdateStats = db.prepare(`
   UPDATE users SET kills = @kills, deaths = @deaths, rating = @rating
   WHERE nickname = @nickname
 `);
-// ============================================================
-// server.js 에 아래 내용을 추가하세요
-// 위치: DB 초기화 블록(db.exec) 바로 아래
-// ============================================================
-
-// ── 플랫포머 랭킹 테이블 ──────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS platformer_scores (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    nickname  TEXT NOT NULL,
-    score     INTEGER NOT NULL DEFAULT 0,
-    deaths    INTEGER NOT NULL DEFAULT 0,
-    clear_time INTEGER NOT NULL DEFAULT 0,   -- 클리어 타임 (초)
-    grade     TEXT NOT NULL DEFAULT 'D',
-    created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
-  );
-  CREATE INDEX IF NOT EXISTS idx_pf_score ON platformer_scores(score DESC);
-`);
 
 const stmtInsertPfScore = db.prepare(`
   INSERT INTO platformer_scores (nickname, score, deaths, clear_time, grade, created_at)
   VALUES (@nickname, @score, @deaths, @clearTime, @grade, @createdAt)
 `);
-
 const stmtGetPfRank = db.prepare(`
   SELECT nickname, score, deaths, clear_time, grade, created_at
   FROM platformer_scores
   ORDER BY score DESC
   LIMIT 20
 `);
-
 const stmtGetMyBest = db.prepare(`
   SELECT score, deaths, clear_time, grade
   FROM platformer_scores
@@ -83,50 +74,7 @@ const stmtGetMyBest = db.prepare(`
   LIMIT 1
 `);
 
-// ── REST API: 플랫포머 클리어 기록 저장 ──────────────────
-app.post('/api/platformer/score', (req, res) => {
-  const { nickname, score, deaths, clearTime } = req.body || {};
-  if (!nickname || score == null) return res.status(400).json({ error: '필수 항목 누락' });
-
-  function getGrade(s) {
-    if (s >= 80000) return 'S';
-    if (s >= 60000) return 'A';
-    if (s >= 40000) return 'B';
-    if (s >= 20000) return 'C';
-    return 'D';
-  }
-
-  stmtInsertPfScore.run({
-    nickname,
-    score:     Number(score),
-    deaths:    Number(deaths) || 0,
-    clearTime: Number(clearTime) || 0,
-    grade:     getGrade(Number(score)),
-    createdAt: Date.now(),
-  });
-
-  return res.json({ ok: true, grade: getGrade(Number(score)) });
-});
-
-// ── REST API: 플랫포머 랭킹 조회 ─────────────────────────
-app.get('/api/platformer/ranking', (req, res) => {
-  const rows = stmtGetPfRank.all();
-  return res.json(rows);
-});
-
-// ── REST API: 내 베스트 기록 ──────────────────────────────
-app.get('/api/platformer/best/:nickname', (req, res) => {
-  const row = stmtGetMyBest.get(req.params.nickname);
-  if (!row) return res.status(404).json({ error: '기록 없음' });
-  return res.json(row);
-});
-
-// ============================================================
-// Socket.IO update_stats 핸들러는 그대로 두되,
-// 클라이언트에서 /api/platformer/score 로 직접 POST하는 방식 사용
-// (아래 클라이언트 코드 참고)
-// ============================================================
-// ── 비밀번호 해시 (auth.js 와 동일한 로직) ────────────────
+// ── 비밀번호 해시 ─────────────────────────────────────────
 function hashPassword(pw) {
   let h = 0;
   for (let i = 0; i < pw.length; i++) {
@@ -136,13 +84,21 @@ function hashPassword(pw) {
   return h.toString(16);
 }
 
+function pfGrade(s) {
+  if (s >= 80000) return 'S';
+  if (s >= 60000) return 'A';
+  if (s >= 40000) return 'B';
+  if (s >= 20000) return 'C';
+  return 'D';
+}
+
 // ── Express 앱 ─────────────────────────────────────────────
 const app    = express();
 const server = createServer(app);
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(STATIC_DIR));  // 게임 파일 정적 제공
+app.use(express.static(STATIC_DIR));
 
 // ── REST API: 회원가입 ─────────────────────────────────────
 app.post('/api/register', (req, res) => {
@@ -167,11 +123,7 @@ app.post('/api/register', (req, res) => {
     createdAt: Date.now(),
   });
 
-  return res.json({
-    nickname,
-    pixels: pixels || [],
-    kills: 0, deaths: 0, rating: 0,
-  });
+  return res.json({ nickname, pixels: pixels || [], kills: 0, deaths: 0, rating: 0 });
 });
 
 // ── REST API: 로그인 ───────────────────────────────────────
@@ -206,11 +158,10 @@ app.post('/api/change-nickname', (req, res) => {
     return res.status(400).json({ error: '닉네임에 허용되지 않는 문자가 있습니다.' });
 
   const row = stmtGetUser.get(nickname);
-  if (!row)                                  return res.status(404).json({ error: '존재하지 않는 닉네임입니다.' });
+  if (!row)                                    return res.status(404).json({ error: '존재하지 않는 닉네임입니다.' });
   if (row.password !== hashPassword(password)) return res.status(401).json({ error: '비밀번호가 틀렸습니다.' });
-  if (stmtGetUser.get(newNickname))          return res.status(409).json({ error: '이미 사용 중인 닉네임입니다.' });
+  if (stmtGetUser.get(newNickname))            return res.status(409).json({ error: '이미 사용 중인 닉네임입니다.' });
 
-  // 기존 데이터를 새 닉네임으로 복사 후 원본 삭제
   db.prepare(`
     INSERT INTO users (nickname, password, pixels, kills, deaths, rating, created_at)
     VALUES (@newNickname, @password, @pixels, @kills, @deaths, @rating, @created_at)
@@ -229,7 +180,7 @@ app.post('/api/change-password', (req, res) => {
     return res.status(400).json({ error: '새 비밀번호는 4자 이상이어야 합니다.' });
 
   const row = stmtGetUser.get(nickname);
-  if (!row)                                       return res.status(404).json({ error: '존재하지 않는 닉네임입니다.' });
+  if (!row)                                           return res.status(404).json({ error: '존재하지 않는 닉네임입니다.' });
   if (row.password !== hashPassword(currentPassword)) return res.status(401).json({ error: '현재 비밀번호가 틀렸습니다.' });
 
   db.prepare('UPDATE users SET password = ? WHERE nickname = ?')
@@ -258,22 +209,44 @@ app.get('/api/user/ping_check', (_, res) => res.json({ ok: true }));
 app.get('/api/user/:nickname', (req, res) => {
   const row = stmtGetUser.get(req.params.nickname);
   if (!row) return res.status(404).json({ error: '없는 유저' });
-  const { password: _, ...safe } = row;  // 비밀번호 제외
+  const { password: _, ...safe } = row;
   safe.pixels = JSON.parse(safe.pixels);
   return res.json(safe);
 });
 
-// ── 인메모리 게임 상태 ─────────────────────────────────────
-// rooms[roomId] = { meta: {...}, state: { uid: playerData } }
-// presence[uid] = { nickname, uid, ts }
-// hits[uid]     = [ { damage, from, weapon, ts, id } ]
-// duels.requests[uid] = { fromUid, fromNick, ts }
-// duels.responses[uid] = { status, roomId, ts }
-// duels.rooms[roomId]  = { status, ready: {}, score: {}, ... }
+// ── REST API: 플랫포머 기록 저장 ──────────────────────────
+app.post('/api/platformer/score', (req, res) => {
+  const { nickname, score, deaths, clearTime } = req.body || {};
+  if (!nickname || score == null) return res.status(400).json({ error: '필수 항목 누락' });
 
-const rooms    = {};   // roomId → { meta, state }
-const presence = {};   // uid → { nickname, uid, ts }
-const hits     = {};   // targetUid → [ hitObj ]
+  stmtInsertPfScore.run({
+    nickname,
+    score:     Number(score),
+    deaths:    Number(deaths) || 0,
+    clearTime: Number(clearTime) || 0,
+    grade:     pfGrade(Number(score)),
+    createdAt: Date.now(),
+  });
+
+  return res.json({ ok: true, grade: pfGrade(Number(score)) });
+});
+
+// ── REST API: 플랫포머 랭킹 조회 ─────────────────────────
+app.get('/api/platformer/ranking', (req, res) => {
+  return res.json(stmtGetPfRank.all());
+});
+
+// ── REST API: 플랫포머 개인 베스트 ───────────────────────
+app.get('/api/platformer/best/:nickname', (req, res) => {
+  const row = stmtGetMyBest.get(req.params.nickname);
+  if (!row) return res.status(404).json({ error: '기록 없음' });
+  return res.json(row);
+});
+
+// ── 인메모리 게임 상태 ─────────────────────────────────────
+const rooms    = {};
+const presence = {};
+const hits     = {};
 const duels    = { requests: {}, responses: {}, rooms: {} };
 
 function ensureRoom(roomId) {
@@ -287,7 +260,6 @@ const io = new Server(server, {
   transports: ['websocket', 'polling'],
 });
 
-// uid → socket.id 역매핑 (한 uid = 한 소켓 가정)
 const uidToSocket = {};
 
 io.on('connection', socket => {
@@ -295,22 +267,17 @@ io.on('connection', socket => {
   let myNickname = null;
   let myRoomId   = null;
 
-  // ── 입장 ──────────────────────────────────────────────
   socket.on('join', ({ uid, nickname, roomId, pixels, kills, deaths, rating }) => {
     myUid      = uid;
     myNickname = nickname;
     myRoomId   = (roomId || 'PUBLIC').toUpperCase();
 
     uidToSocket[uid] = socket.id;
-
-    // 프레전스 등록
     presence[uid] = { uid, nickname, ts: Date.now() };
 
-    // 룸 참여
     socket.join(myRoomId);
     const room = ensureRoom(myRoomId);
 
-    // 룸 메타 없으면 생성
     if (!room.meta) {
       room.meta = {
         id: myRoomId, name: myRoomId, host: uid,
@@ -319,7 +286,6 @@ io.on('connection', socket => {
       };
     }
 
-    // 소켓 끊기면 자동 제거
     socket.on('disconnect', () => {
       delete presence[uid];
       delete uidToSocket[uid];
@@ -330,37 +296,27 @@ io.on('connection', socket => {
       io.emit('presence_update', Object.values(presence));
     });
 
-    // 현재 룸 메타 전송
     socket.emit('room_meta', room.meta);
-
-    // 현재 presence 전송
     io.emit('presence_update', Object.values(presence));
-
-    // 현재 state 전송
     socket.emit('state_update', room.state);
 
-    // 쌓여있는 hits 전송
     if (hits[uid]?.length) {
       socket.emit('hits', hits[uid]);
       hits[uid] = [];
     }
   });
 
-  // ── 위치/상태 업데이트 ────────────────────────────────
   socket.on('state_update', data => {
     if (!myUid || !myRoomId) return;
     const room = ensureRoom(myRoomId);
     room.state[myUid] = { ...data, ts: Date.now() };
-    // 룸 내 모든 플레이어에게 브로드캐스트 (발신자 포함)
     io.to(myRoomId).emit('state_update', room.state);
-    // 룸 메타 updatedAt 갱신
     if (room.meta) {
       room.meta.updatedAt = Date.now();
       if (room.meta.status !== 'ended') room.meta.status = 'playing';
     }
   });
 
-  // ── 방 메타 업데이트 ──────────────────────────────────
   socket.on('room_meta_update', patch => {
     if (!myRoomId) return;
     const room = ensureRoom(myRoomId);
@@ -368,11 +324,9 @@ io.on('connection', socket => {
     io.to(myRoomId).emit('room_meta', room.meta);
   });
 
-  // ── 룸 변경 ───────────────────────────────────────────
   socket.on('change_room', ({ newRoomId, meta }) => {
     if (!myUid) return;
 
-    // 기존 룸 state 에서 제거
     if (myRoomId && rooms[myRoomId]) {
       delete rooms[myRoomId].state[myUid];
       io.to(myRoomId).emit('state_update', rooms[myRoomId].state);
@@ -397,7 +351,6 @@ io.on('connection', socket => {
     socket.emit('state_update', room.state);
   });
 
-  // ── 퀵매치 ────────────────────────────────────────────
   socket.on('quick_match', ({ limit = 10 }, cb) => {
     const candidate = Object.values(rooms)
       .filter(r => r.meta && r.meta.status !== 'ended' && Number(r.meta.limit) === Number(limit) && r.meta.id !== myRoomId)
@@ -410,26 +363,21 @@ io.on('connection', socket => {
     cb({ roomId: targetRoom });
   });
 
-  // ── 히트 전송 ─────────────────────────────────────────
   socket.on('send_hit', ({ targetUid, damage, weapon, from }) => {
     const hitObj = { damage, weapon, from, ts: Date.now(), id: `${from}_${Date.now()}` };
     const targetSid = uidToSocket[targetUid];
     if (targetSid) {
-      // 상대가 온라인이면 바로 전송
       io.to(targetSid).emit('hits', [hitObj]);
     } else {
-      // 오프라인이면 큐에 보관
       if (!hits[targetUid]) hits[targetUid] = [];
       hits[targetUid].push(hitObj);
     }
   });
 
-  // ── 통계 업데이트 ─────────────────────────────────────
   socket.on('update_stats', ({ nickname, kills, deaths, rating }) => {
     stmtUpdateStats.run({ kills, deaths, rating, nickname });
   });
 
-  // ── 채팅 ──────────────────────────────────────────────
   socket.on('chat', ({ text }) => {
     if (!myUid || !myRoomId || !text) return;
     io.to(myRoomId).emit('chat', {
@@ -438,11 +386,9 @@ io.on('connection', socket => {
     });
   });
 
-  // ── 프레전스 heartbeat ────────────────────────────────
   socket.on('heartbeat', () => {
     if (!myUid) return;
     if (presence[myUid]) presence[myUid].ts = Date.now();
-    // 90초 이상 오래된 presence 정리
     const now = Date.now();
     for (const uid of Object.keys(presence)) {
       if (now - (presence[uid].ts || 0) > 90000) delete presence[uid];
@@ -450,7 +396,6 @@ io.on('connection', socket => {
     io.emit('presence_update', Object.values(presence));
   });
 
-  // ── 결투 요청 ─────────────────────────────────────────
   socket.on('duel_request', ({ targetUid, fromNick }) => {
     duels.requests[targetUid] = { fromUid: myUid, fromNick, ts: Date.now() };
     const targetSid = uidToSocket[targetUid];
@@ -462,10 +407,8 @@ io.on('connection', socket => {
     const payload = { status: 'accepted', roomId, ts: Date.now() };
     duels.responses[toUid] = payload;
     delete duels.requests[myUid];
-    // 요청한 사람(toUid)에게 전송
     const toSid = uidToSocket[toUid];
     if (toSid) io.to(toSid).emit('duel_response', payload);
-    // 수락한 사람(myUid) 본인에게도 전송 — 무기선택창 표시 용도
     socket.emit('duel_response_self', payload);
     duels.rooms[roomId] = { status: 'waiting', ready: {}, score: {}, rounds: {}, round: 1 };
   });
@@ -493,7 +436,6 @@ io.on('connection', socket => {
     if (!duels.rooms[roomId]) return;
     duels.rooms[roomId].score[myUid] = (duels.rooms[roomId].score[myUid] || 0) + 1;
     duels.rooms[roomId].lastKillNick = killerNick;
-    // 5킬 달성 시 즉시 종료
     const myScore = duels.rooms[roomId].score[myUid];
     if (myScore >= 5) {
       duels.rooms[roomId].status     = 'ended';
@@ -505,14 +447,13 @@ io.on('connection', socket => {
 
   socket.on('duel_end', ({ roomId, winnerNick }) => {
     if (!duels.rooms[roomId]) return;
-    duels.rooms[roomId].status    = 'ended';
+    duels.rooms[roomId].status     = 'ended';
     duels.rooms[roomId].winnerNick = winnerNick;
-    duels.rooms[roomId].endedAt   = Date.now();
+    duels.rooms[roomId].endedAt    = Date.now();
     io.emit(`duel_room_${roomId}`, duels.rooms[roomId]);
   });
 
   socket.on('duel_score_listen', ({ roomId }) => {
-    // 클라이언트가 구독 요청 → 현재 값 즉시 전송
     if (duels.rooms[roomId]) {
       socket.emit(`duel_room_${roomId}`, duels.rooms[roomId]);
     }
@@ -521,13 +462,10 @@ io.on('connection', socket => {
 
 // ══════════════════════════════════════════════════════════
 // ── CHESS namespace (/chess) ───────────────────────────────
-// 게임 서버와 완전 분리 — 상태/소켓/룸 전혀 공유 안 함
 // ══════════════════════════════════════════════════════════
 const chessIO = io.of('/chess');
 
-// chessRooms[roomId] = { white: uid|null, black: uid|null, board: null, turn: 'w', mode: 'classic', status: 'waiting' }
 const chessRooms = {};
-// chessUidToSocket[uid] = socket.id
 const chessUidToSocket = {};
 
 function ensureChessRoom(roomId) {
@@ -535,7 +473,7 @@ function ensureChessRoom(roomId) {
     chessRooms[roomId] = {
       white: null, black: null,
       turn: 'w', mode: 'classic',
-      status: 'waiting', // waiting | playing | ended
+      status: 'waiting',
     };
   }
   return chessRooms[roomId];
@@ -544,9 +482,8 @@ function ensureChessRoom(roomId) {
 chessIO.on('connection', socket => {
   let myUid    = null;
   let myRoomId = null;
-  let myColor  = null; // 'white' | 'black'
+  let myColor  = null;
 
-  // ── 방 입장/생성 ──────────────────────────────────────
   socket.on('chess_join', ({ uid, roomId, mode }) => {
     myUid    = uid;
     myRoomId = (roomId || '').toUpperCase().trim();
@@ -555,13 +492,10 @@ chessIO.on('connection', socket => {
     chessUidToSocket[uid] = socket.id;
     const room = ensureChessRoom(myRoomId);
 
-    // 색 배정
     if (!room.white) {
-      room.white = uid;
-      myColor    = 'white';
+      room.white = uid; myColor = 'white';
     } else if (!room.black && room.white !== uid) {
-      room.black = uid;
-      myColor    = 'black';
+      room.black = uid; myColor = 'black';
       room.status = 'playing';
       if (mode) room.mode = mode;
     } else if (room.white === uid) {
@@ -575,22 +509,16 @@ chessIO.on('connection', socket => {
     socket.join(myRoomId);
     socket.emit('chess_joined', { color: myColor, roomId: myRoomId, mode: room.mode, status: room.status });
 
-    // 상대방에게 알림
     if (room.status === 'playing') {
       chessIO.to(myRoomId).emit('chess_start', { mode: room.mode });
     }
   });
 
-  // ── 수 전송 ───────────────────────────────────────────
-  // 클라이언트가 수를 두면 상대방에게 그대로 전달
-  // 검증은 각 클라이언트가 자체적으로 함 (캐주얼 수준)
   socket.on('chess_move', (moveData) => {
     if (!myRoomId) return;
-    // 상대방에게만 전송 (발신자 제외)
     socket.to(myRoomId).emit('chess_move', moveData);
   });
 
-  // ── 게임 종료 알림 ────────────────────────────────────
   socket.on('chess_end', ({ result }) => {
     if (!myRoomId) return;
     const room = chessRooms[myRoomId];
@@ -598,7 +526,6 @@ chessIO.on('connection', socket => {
     chessIO.to(myRoomId).emit('chess_end', { result });
   });
 
-  // ── 재시작 요청 ───────────────────────────────────────
   socket.on('chess_restart', () => {
     if (!myRoomId) return;
     const room = chessRooms[myRoomId];
@@ -608,7 +535,6 @@ chessIO.on('connection', socket => {
     chessIO.to(myRoomId).emit('chess_restart');
   });
 
-  // ── 채팅 ──────────────────────────────────────────────
   socket.on('chess_chat', ({ text }) => {
     if (!myRoomId || !text) return;
     chessIO.to(myRoomId).emit('chess_chat', {
@@ -618,13 +544,11 @@ chessIO.on('connection', socket => {
     });
   });
 
-  // ── 연결 끊김 ─────────────────────────────────────────
   socket.on('disconnect', () => {
     if (!myUid) return;
     delete chessUidToSocket[myUid];
     if (myRoomId && chessRooms[myRoomId]) {
       socket.to(myRoomId).emit('chess_opponent_left');
-      // 방 정리 (양쪽 다 나가면)
       const room = chessRooms[myRoomId];
       if (room.white === myUid) room.white = null;
       if (room.black === myUid) room.black = null;
