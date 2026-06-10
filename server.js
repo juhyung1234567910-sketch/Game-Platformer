@@ -310,9 +310,10 @@ function tickPfBlocks() {
 }
 
 // 50ms마다 틱 + PLATFORMER 룸에 브로드캐스트
+// am=true 블록은 클라이언트가 로컬 처리하므로 null로 전송 (클라이언트가 무시)
 setInterval(() => {
   tickPfBlocks();
-  const payload = pfBlocks.map(b => ({ x: b.x, y: b.y }));
+  const payload = pfBlocks.map(b => b.am ? null : { x: b.x, y: b.y });
   io.to(PF_ROOM).emit('blocks_update', payload);
 }, 50);
 
