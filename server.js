@@ -312,12 +312,22 @@ function tickPfBlocks() {
 // 16ms마다 서버 틱 (블록 위치 계산)
 setInterval(tickPfBlocks, 16);
 
+// am=true 블록의 최신 위치를 클라이언트로부터 받아 저장
+// (호스트 클라이언트가 자신의 로컬 상태를 업로드)
+const amBlockPositions = {};  // index → { x, y, movingWay, returning }
+
 // 1초마다 드리프트 보정 브로드캐스트 (트래픽 최소화)
 // 클라이언트는 이 상태로 로컬 60fps 계산 재동기화
 setInterval(() => {
-  const payload = pfBlocks.map(b => b.am ? null : { x: b.x, y: b.y, movingWay: b.movingWay });
+  const payload = pfBlocks.map((b, i) => {
+    if (b.am) {
+      // am 블록은 클라이언트가 올린 위치가 있으면 그걸 사용, 없으면 초기값
+      return amBlockPositions[i] ?? { x: b.inx, y: b.iny, movingWay: 1, returning: false };
+    }
+    return { x: b.x, y: b.y, movingWay: b.movingWay };
+  });
   io.to(PF_ROOM).emit('blocks_update', payload);
-}, 1000);
+}, 100);  // 100ms(10fps)로 단축해서 am 블록도 부드럽게 동기화
 
 // ── Socket.IO ──────────────────────────────────────────────
 const io = new Server(server, {
@@ -443,6 +453,16 @@ io.on('connection', socket => {
       if (!hits[targetUid]) hits[targetUid] = [];
       hits[targetUid].push(hitObj);
     }
+  });
+
+  // am=true 블록 위치를 클라이언트로부터 받아 저장 후 같은 방에 브로드캐스트
+  socket.on('am_blocks_update', (updates) => {
+    if (myRoomId !== PF_ROOM) return;
+    for (const { index, x, y, movingWay, returning } of updates) {
+      amBlockPositions[index] = { x, y, movingWay, returning };
+    }
+    // 즉시 다른 플레이어에게 전달 (본인 제외)
+    socket.to(PF_ROOM).emit('am_blocks_patch', updates);
   });
 
   socket.on('update_stats', ({ nickname, kills, deaths, rating }) => {
