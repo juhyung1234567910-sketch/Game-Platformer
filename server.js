@@ -304,7 +304,11 @@ function tickPfBlocks() {
       // 아무도 안 밟고 있으면 서버가 복귀 계산 후 브로드캐스트
       if (!b.ridden || (Date.now() - b.riddenAt) > 200) {
         const distFromOrigin = Math.abs(b.x - b.inx) + Math.abs(b.y - b.iny);
-        if (distFromOrigin > 1) {
+        const pfState = rooms[PF_ROOM]?.state || {};
+        const anyoneNear = Object.values(pfState).some(p =>
+          p && Math.abs((p.x||0) - b.x) + Math.abs((p.y||0) - b.y) <= 150
+        );
+        if (distFromOrigin > 1 && !anyoneNear) {
           const speed = Math.max(Math.abs(b.mx)||1, Math.abs(b.my)||1);
           if (Math.abs(b.x - b.inx) > speed) b.x += (b.inx > b.x ? 1 : -1) * speed;
           else b.x = b.inx;
