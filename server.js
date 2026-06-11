@@ -243,6 +243,12 @@ app.get('/api/platformer/best/:nickname', (req, res) => {
   return res.json(row);
 });
 
+// ── Socket.IO (io 선언을 블록 코드보다 앞에 위치) ─────────
+const io = new Server(server, {
+  cors: { origin: '*' },
+  transports: ['websocket', 'polling'],
+});
+
 // ── 인메모리 게임 상태 ─────────────────────────────────────
 const rooms    = {};
 const presence = {};
@@ -337,12 +343,7 @@ setInterval(() => {
   io.to(PF_ROOM).emit('blocks_update', payload);
 }, 1000);
 
-// ── Socket.IO ──────────────────────────────────────────────
-const io = new Server(server, {
-  cors: { origin: '*' },
-  transports: ['websocket', 'polling'],
-});
-
+// ── Socket.IO 이벤트 ───────────────────────────────────────
 const uidToSocket = {};
 
 io.on('connection', socket => {
