@@ -302,28 +302,24 @@ function tickPfBlocks() {
     if (b.am) {
       // 클라이언트 로직과 동일: 밟고 있으면(ridden) 서버는 손 안 댐
       // 아무도 안 밟고 있으면 서버가 복귀 계산 후 브로드캐스트
-      if (!b.ridden) {
+      if (!b.ridden || (Date.now() - b.riddenAt) > 200) {
         const distFromOrigin = Math.abs(b.x - b.inx) + Math.abs(b.y - b.iny);
         if (distFromOrigin > 1) {
-          const pfState = rooms[PF_ROOM]?.state || {};
-          // 150px 안에 아무도 없으면 복귀
-          const anyoneNear = Object.values(pfState).some(p =>
-            p && Math.abs((p.x||0) - b.x) + Math.abs((p.y||0) - b.y) <= 150
-          );
-          if (!anyoneNear) {
-            const speed = Math.max(Math.abs(b.mx)||1, Math.abs(b.my)||1);
-            if (Math.abs(b.x - b.inx) > speed) b.x += (b.inx > b.x ? 1 : -1) * speed;
-            else b.x = b.inx;
-            if (Math.abs(b.y - b.iny) > speed) b.y += (b.iny > b.y ? 1 : -1) * speed;
-            else b.y = b.iny;
-            b.returning = (Math.abs(b.x - b.inx) + Math.abs(b.y - b.iny)) > 1;
-            io.to(PF_ROOM).emit('am_blocks_patch', [{ index: pfBlocks.indexOf(b), x: b.x, y: b.y, returning: b.returning }]);
-          }
+          const speed = Math.max(Math.abs(b.mx)||1, Math.abs(b.my)||1);
+          if (Math.abs(b.x - b.inx) > speed) b.x += (b.inx > b.x ? 1 : -1) * speed;
+          else b.x = b.inx;
+          if (Math.abs(b.y - b.iny) > speed) b.y += (b.iny > b.y ? 1 : -1) * speed;
+          else b.y = b.iny;
+          b.returning = (Math.abs(b.x - b.inx) + Math.abs(b.y - b.iny)) > 1;
+          const idx = pfBlocks.indexOf(b);
+          amBlockPositions[idx] = { x: b.x, y: b.y, returning: b.returning };
+          io.to(PF_ROOM).emit('am_blocks_patch', [{ index: idx, x: b.x, y: b.y, returning: b.returning }]);
         } else {
           b.returning = false;
+          amBlockPositions[pfBlocks.indexOf(b)] = { x: b.inx, y: b.iny, returning: false };
         }
       }
-      b.ridden = false;
+      // ridden 상태는 riddenAt 타임스탬프로 판단 (200ms 내 수신 시 밟는 중으로 간주)
       continue;
     }
 
@@ -499,7 +495,8 @@ io.on('connection', socket => {
         b.x = u.x;
         b.y = u.y;
         b.returning = u.returning ?? false;
-        b.ridden = true; // 이 틱에 누군가 밟고 있음 → tickPfBlocks에서 복귀 안 함
+        b.ridden = true;
+        b.riddenAt = Date.now();
         amBlockPositions[u.index] = { x: b.x, y: b.y, returning: b.returning };
       }
     }
