@@ -471,19 +471,19 @@ io.on('connection', socket => {
     }
   });
 
-  // am=true 블록 위치를 올라탄 클라이언트에서 수신 → 같은 방 다른 클라이언트에 즉시 전달
+  // am=true 블록 위치를 밟은 클라이언트에서 수신 → 같은 방 다른 클라이언트에 즉시 중계
   socket.on('am_blocks_update', (updates) => {
     if (myRoomId !== PF_ROOM) return;
     for (const u of updates) {
-      amBlockPositions[u.index] = u;
       const b = pfBlocks[u.index];
       if (b) {
-        b.x = u.x; b.y = u.y; b.ridden = true;
-        // 클라이언트가 복귀 완료(원점 도달)를 알려왔으면 서버 returning도 리셋
-        if (u.returning === false && b.returning) b.returning = false;
-        else if (!u.returning) b.returning = false;
+        b.x = u.x;
+        b.y = u.y;
+        b.returning = u.returning ?? false;
+        amBlockPositions[u.index] = { x: b.x, y: b.y, returning: b.returning };
       }
     }
+    // 보낸 사람 제외하고 같은 방 모두에게 중계
     socket.to(PF_ROOM).emit('am_blocks_patch', updates);
   });
 
